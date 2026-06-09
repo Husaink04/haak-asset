@@ -682,8 +682,7 @@ app.post("/api/upload", requireAuth, (request, response) => {
         return response.status(400).json({ error: "A valid file is required." });
       }
 
-      const publicBaseUrl = process.env.PUBLIC_API_URL || `http://127.0.0.1:${port}`;
-      const url = `${publicBaseUrl}/uploads/${request.file.filename}`;
+      const url = `/uploads/${request.file.filename}`;
       const record = {
         id: uid("file"),
         uploadedBy: request.auth.sub,

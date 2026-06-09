@@ -313,6 +313,22 @@ function fileNameFromUrl(value) {
   }
 }
 
+function resolveMediaUrl(value) {
+  if (!value) return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+  if (raw.startsWith("/uploads/")) return raw;
+  try {
+    const url = new URL(raw, window.location.origin);
+    if (url.pathname.startsWith("/uploads/")) {
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+    return raw.startsWith("/") ? raw : url.href;
+  } catch {
+    return raw;
+  }
+}
+
 function normalizePhone(value) {
   return String(value || "").replace(/\D+/g, "");
 }
@@ -569,7 +585,7 @@ function Stat({ label, value, icon }) {
 
 function CompanyLogo({ client }) {
   if (client.logoUrl) {
-    return <img className="company-logo" src={client.logoUrl} alt={`${client.companyName} logo`} />;
+    return <img className="company-logo" src={resolveMediaUrl(client.logoUrl)} alt={`${client.companyName} logo`} />;
   }
 
   return (
@@ -582,7 +598,7 @@ function CompanyLogo({ client }) {
 function AssetVisual({ asset, className = "" }) {
   const imageUrl = asset.images?.[0];
   if (imageUrl) {
-    return <img className={className} src={imageUrl} alt={asset.name} />;
+    return <img className={className} src={resolveMediaUrl(imageUrl)} alt={asset.name} />;
   }
 
   return (
@@ -726,7 +742,7 @@ function CompanyForm({ onCreate }) {
           {uploadingLogo && <small className="upload-note">Uploading logo...</small>}
           {uploadError && <small className="upload-error">{uploadError}</small>}
           <div className="company-logo-preview">
-            {form.logoUrl ? <img src={form.logoUrl} alt="Company logo preview" /> : <Building2 size={30} />}
+            {form.logoUrl ? <img src={resolveMediaUrl(form.logoUrl)} alt="Company logo preview" /> : <Building2 size={30} />}
             <span>
               <strong>{form.companyName || "Company name"}</strong>
               <small>Logo preview</small>
@@ -916,7 +932,7 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
     <form className="panel form-grid" onSubmit={submit}>
       <h2>Edit company</h2>
       <div className="company-logo-preview compact-logo-preview">
-        {form.logoUrl ? <img src={form.logoUrl} alt={`${form.companyName} logo`} /> : <Building2 size={28} />}
+        {form.logoUrl ? <img src={resolveMediaUrl(form.logoUrl)} alt={`${form.companyName} logo`} /> : <Building2 size={28} />}
         <span>
           <strong>{form.companyName}</strong>
           <small>Company logo</small>
@@ -1502,7 +1518,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate }) {
                 {uploadError && <small className="upload-error">{uploadError}</small>}
                 {form.image ? (
                   <div className="asset-image-review">
-                    <img src={form.image} alt="Asset preview" />
+                    <img src={resolveMediaUrl(form.image)} alt="Asset preview" />
                     <div className="asset-image-review-actions">
                       <strong>Image ready</strong>
                       <small>You can change it, keep it, or remove it before creating the asset.</small>
@@ -1547,7 +1563,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate }) {
                       <div className="document-row" key={`${document}-${index}`}>
                         <Paperclip size={16} />
                         {String(document).startsWith("http") ? (
-                          <a href={document} target="_blank" rel="noreferrer">{fileNameFromUrl(document)}</a>
+                        <a href={resolveMediaUrl(document)} target="_blank" rel="noreferrer">{fileNameFromUrl(document)}</a>
                         ) : (
                           <span>{document}</span>
                         )}
@@ -1719,7 +1735,7 @@ function AssetMediaPanel({ asset, onAddImage, onAddDocument, onRemoveImage, onRe
         <div className="image-grid">
           {asset.images.map((image, index) => (
             <div className="media-tile" key={`${image}-${index}`}>
-              <img src={image} alt={asset.name} />
+              <img src={resolveMediaUrl(image)} alt={asset.name} />
               {!readOnly && <button className="secondary inline-remove" type="button" onClick={() => onRemoveImage?.(image)}>Remove</button>}
             </div>
           ))}
@@ -1743,7 +1759,7 @@ function AssetMediaPanel({ asset, onAddImage, onAddDocument, onRemoveImage, onRe
           <div className="document-row" key={`${document}-${index}`}>
             <Paperclip size={16} />
             {String(document).startsWith("http") ? (
-              <a href={document} target="_blank" rel="noreferrer">{fileNameFromUrl(document)}</a>
+              <a href={resolveMediaUrl(document)} target="_blank" rel="noreferrer">{fileNameFromUrl(document)}</a>
             ) : (
               <span>{document}</span>
             )}
@@ -2377,7 +2393,7 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
                     return (
                       <a key={`${url}-${index}`} className="attachment-preview" href={url} target="_blank" rel="noreferrer">
                         {mimeType.startsWith("image/") ? (
-                          <img src={url} alt={label} />
+                          <img src={resolveMediaUrl(url)} alt={label} />
                         ) : (
                           <div className="attachment-file">
                             <Paperclip size={16} />
