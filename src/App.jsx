@@ -1259,16 +1259,36 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
   );
 }
 
-function AssetRow({ asset, client, selected, onSelect }) {
+function AssetRow({ asset, client, selected, onSelect, onEdit }) {
+  const interactive = Boolean(onSelect);
+
   return (
-    <button className={selected ? "asset-row active" : "asset-row"} onClick={() => onSelect?.(asset.id)}>
+    <div
+      className={selected ? "asset-row active" : "asset-row"}
+      onClick={() => onSelect?.(asset.id)}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={interactive ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect?.(asset.id);
+        }
+      } : undefined}
+    >
       <AssetVisual asset={asset} />
-      <span>
+      <span className="asset-row-content">
         <strong>{asset.name}</strong>
         <small>{asset.assetCode} - {client?.companyName}{asset.userName ? ` / ${asset.userName}` : ""}</small>
       </span>
-      <span className={statusClass(asset.status)}>{formatStatusLabel(asset.status)}</span>
-    </button>
+      <div className="asset-row-actions">
+        <span className={statusClass(asset.status)}>{formatStatusLabel(asset.status)}</span>
+        {onEdit && (
+          <button className="asset-row-edit" type="button" onClick={(event) => { event.stopPropagation(); onEdit(asset.id); }}>
+            Edit asset
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1641,7 +1661,8 @@ function LifecycleManager({ asset, onAddLifecycle }) {
 function AssetsPage({ user, data, scopedAssets, setData, notify }) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(scopedAssets[0]?.id);
-  const [adminAssetView, setAdminAssetView] = useState("details");
+  const [editingId, setEditingId] = useState(null);
+  const [showAssetForm, setShowAssetForm] = useState(false);
   const assetCategories = data.assetCategories || [];
   const selected = scopedAssets.find((asset) => asset.id === selectedId) || scopedAssets[0];
   const filtered = scopedAssets.filter((asset) =>
@@ -1655,6 +1676,9 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
       }))
       .filter((group) => group.assets.length > 0)
     : [{ client: data.clients.find((client) => client.id === user.clientId), assets: filtered }];
+  const creationClients = user.role === "client"
+    ? data.clients.filter((client) => client.id === user.clientId)
+    : data.clients;
 
   function createAsset(form) {
     const assetCode = generateAssetCode(data.clients, data.assets, form.clientId, form.category);
@@ -1683,7 +1707,8 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
     }
     setData((current) => ({ ...current, assets: [asset, ...current.assets] }));
     setSelectedId(asset.id);
-    setAdminAssetView("details");
+    setEditingId(null);
+    setShowAssetForm(false);
     notify(`Added ${asset.name}.`);
   }
 
@@ -1732,7 +1757,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
       notify("This asset still conflicts with another asset code. Change the company or category, or remove the duplicate asset.", "error");
       return;
     }
-    setAdminAssetView("details");
+    setEditingId(null);
     notify(`Updated ${form.name}.`);
   }
 
@@ -1741,6 +1766,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
       const remainingAssets = current.assets.filter((asset) => asset.id !== assetId);
       const deletedAppealIds = current.appeals.filter((appeal) => appeal.assetId === assetId).map((appeal) => appeal.id);
       setSelectedId(remainingAssets[0]?.id);
+      setEditingId((currentEditingId) => (currentEditingId === assetId ? null : currentEditingId));
       return {
         ...current,
         assets: remainingAssets,
@@ -1749,7 +1775,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
         appealMessages: current.appealMessages.filter((message) => !deletedAppealIds.includes(message.appealId))
       };
     });
-    setAdminAssetView("details");
     notify("Asset deleted.");
   }
 
@@ -1828,6 +1853,11 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
     }));
   }
 
+  function openAssetForm() {
+    setShowAssetForm(true);
+    setEditingId(null);
+  }
+
   function createCategory(name) {
     const normalized = name.trim();
     if (!normalized) return;
@@ -1845,6 +1875,16 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
 
   return (
     <section className={user.role === "admin" ? "assets-layout admin-assets-layout" : "assets-layout"}>
+      <div className="panel assets-page-toolbar">
+        <div>
+          <span className="eyebrow">Assets</span>
+          <h2>{user.role === "admin" ? "Admin asset library" : "Your assets"}</h2>
+        </div>
+        <button className="primary" type="button" onClick={openAssetForm}>
+          <Plus size={16} /> {user.role === "client" ? "+ Asset" : "Add asset"}
+        </button>
+      </div>
+
       <div className="panel assets-rail">
         <div className="toolbar">
           <div className="search"><Search size={16} /><input placeholder="Search assets" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
@@ -1866,6 +1906,11 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
                     client={client}
                     selected={selected?.id === asset.id}
                     onSelect={setSelectedId}
+                    onEdit={user.role === "admin" ? () => {
+                      setSelectedId(asset.id);
+                      setEditingId(asset.id);
+                      setShowAssetForm(false);
+                    } : null}
                   />
                 ))}
               </div>
@@ -1874,58 +1919,57 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
         </div>
       </div>
       <div className="asset-workspace">
-        {user.role === "admin" && (
-          <div className="panel asset-subnav">
-            <div>
-              <span className="eyebrow">Asset workspace</span>
-              <h2>{adminAssetView === "add" ? "Add asset" : adminAssetView === "edit" ? "Edit asset" : "Asset details"}</h2>
+        {showAssetForm && (
+          <div className="asset-subpage">
+            <div className="panel asset-subpage-intro">
+              <span className="eyebrow">New asset</span>
+              <h2>Create an asset</h2>
+              <p>Use the guided form to generate the asset code, select the category, and save the assigned user.</p>
             </div>
-            <div className="segmented-control">
-              <button className={adminAssetView === "details" ? "active" : ""} type="button" onClick={() => setAdminAssetView("details")}>Details</button>
-              <button className={adminAssetView === "add" ? "active" : ""} type="button" onClick={() => setAdminAssetView("add")}>Add asset</button>
-              <button className={adminAssetView === "edit" ? "active" : ""} type="button" onClick={() => setAdminAssetView("edit")} disabled={!selected}>Edit asset</button>
-            </div>
+            {user.role === "admin" && <AssetCategoryManager categories={assetCategories} onCreateCategory={createCategory} />}
+            <AssetForm clients={creationClients.length > 0 ? creationClients : data.clients} categories={assetCategories} existingAssets={data.assets} onCreate={createAsset} />
           </div>
         )}
-        {selected || user.role === "admin" ? (
+        {selected ? (
           <>
-            {(user.role !== "admin" || adminAssetView === "details") && selected && (
-              <>
-                <div className="panel asset-detail">
-                  <AssetVisual asset={selected} className="asset-hero-image" />
-                  <div className="asset-detail-body">
-                    <div className="asset-detail-head">
-                      <div>
-                        <span className={statusClass(selected.status)}>{formatStatusLabel(selected.status)}</span>
-                        <h2>{selected.name}</h2>
-                        <p>{selected.assetCode} / {selected.category || "Uncategorized"} / {selected.userName || "No user assigned"}</p>
-                      </div>
-                      {user.role === "admin" && (
-                        <label className="status-control">
-                          Status
-                          <select value={selected.status} onChange={(event) => updateStatus(selected.id, event.target.value)}>
-                            <option value="active">Active</option>
-                            <option value="in_service">In service</option>
-                            <option value="repairing">Repairing</option>
-                            <option value="repaired">Repaired</option>
-                            <option value="retired">Retired</option>
-                            <option value="damaged">Damaged</option>
-                          </select>
-                        </label>
-                      )}
-                    </div>
-                    <dl className="asset-facts">
-                      <div><dt>Client</dt><dd>{data.clients.find((client) => client.id === selected.clientId)?.companyName || "Not assigned"}</dd></div>
-                      <div><dt>User name</dt><dd>{selected.userName || "Not recorded"}</dd></div>
-                      <div><dt>Brand / model</dt><dd>{selected.brand || "Not recorded"} / {selected.model || "Not recorded"}</dd></div>
-                      <div><dt>Location</dt><dd>{selected.location || "Not recorded"}</dd></div>
-                      <div><dt>Warranty ends</dt><dd>{selected.warrantyEndDate || "Not recorded"}</dd></div>
-                      <div className="wide"><dt>Notes</dt><dd>{selected.notes || "No notes"}</dd></div>
-                    </dl>
+            <div className="panel asset-detail">
+              <AssetVisual asset={selected} className="asset-hero-image" />
+              <div className="asset-detail-body">
+                <div className="asset-detail-head">
+                  <div>
+                    <span className={statusClass(selected.status)}>{formatStatusLabel(selected.status)}</span>
+                    <h2>{selected.name}</h2>
+                    <p>{selected.assetCode} / {selected.category || "Uncategorized"} / {selected.userName || "No user assigned"}</p>
                   </div>
+                  {user.role === "admin" && !editingId && (
+                    <label className="status-control">
+                      Status
+                      <select value={selected.status} onChange={(event) => updateStatus(selected.id, event.target.value)}>
+                        <option value="active">Active</option>
+                        <option value="in_service">In service</option>
+                        <option value="repairing">Repairing</option>
+                        <option value="repaired">Repaired</option>
+                        <option value="retired">Retired</option>
+                        <option value="damaged">Damaged</option>
+                      </select>
+                    </label>
+                  )}
                 </div>
-                {user.role === "admin" ? (
+                <dl className="asset-facts">
+                  <div><dt>Client</dt><dd>{data.clients.find((client) => client.id === selected.clientId)?.companyName || "Not assigned"}</dd></div>
+                  <div><dt>User name</dt><dd>{selected.userName || "Not recorded"}</dd></div>
+                  <div><dt>Brand / model</dt><dd>{selected.brand || "Not recorded"} / {selected.model || "Not recorded"}</dd></div>
+                  <div><dt>Location</dt><dd>{selected.location || "Not recorded"}</dd></div>
+                  <div><dt>Warranty ends</dt><dd>{selected.warrantyEndDate || "Not recorded"}</dd></div>
+                  <div className="wide"><dt>Notes</dt><dd>{selected.notes || "No notes"}</dd></div>
+                </dl>
+              </div>
+            </div>
+            {user.role === "admin" ? (
+              <>
+                {editingId === selected.id ? (
                   <>
+                    <AssetEditor key={selected.id} asset={selected} clients={data.clients} categories={assetCategories} onUpdate={updateAsset} onDelete={deleteAsset} />
                     <AssetMediaPanel
                       asset={selected}
                       onAddImage={(imageUrl) => addImage(selected.id, imageUrl)}
@@ -1937,58 +1981,36 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
                   </>
                 ) : (
                   <>
-                    <AssetMediaPanel asset={selected} readOnly />
-                    <HistoryPanel title="Lifecycle" items={selected.lifecycle} />
+                    <AssetMediaPanel
+                      asset={selected}
+                      onAddImage={(imageUrl) => addImage(selected.id, imageUrl)}
+                      onAddDocument={(documentName) => addDocument(selected.id, documentName)}
+                      onRemoveImage={(imageUrl) => removeImage(selected.id, imageUrl)}
+                      onRemoveDocument={(_document, index) => removeDocument(selected.id, index)}
+                    />
+                    <LifecycleManager asset={selected} onAddLifecycle={(form) => addLifecycle(selected.id, form)} />
                   </>
                 )}
               </>
-            )}
-            {user.role === "admin" && adminAssetView === "add" && (
-              <div className="asset-subpage">
-                <div className="panel asset-subpage-intro">
-                  <span className="eyebrow">New asset</span>
-                  <h2>Create a new managed asset</h2>
-                  <p>Use the guided wizard to assign the company, record identity details, and upload starting media before saving.</p>
-                </div>
-                <AssetCategoryManager categories={assetCategories} onCreateCategory={createCategory} />
-                <AssetForm clients={data.clients} categories={assetCategories} existingAssets={data.assets} onCreate={createAsset} />
-              </div>
-            )}
-            {user.role === "admin" && adminAssetView === "edit" && (
-              selected ? (
-                <div className="asset-subpage">
-                  <div className="panel asset-subpage-intro">
-                    <span className="eyebrow">Editing</span>
-                    <h2>{selected.name}</h2>
-                    <p>Update asset details, media, and lifecycle information from this dedicated edit workspace.</p>
-                  </div>
-                  <AssetCategoryManager categories={assetCategories} onCreateCategory={createCategory} />
-                  <AssetEditor key={selected.id} asset={selected} clients={data.clients} categories={assetCategories} onUpdate={updateAsset} onDelete={deleteAsset} />
-                  <AssetMediaPanel
-                    asset={selected}
-                    onAddImage={(imageUrl) => addImage(selected.id, imageUrl)}
-                    onAddDocument={(documentName) => addDocument(selected.id, documentName)}
-                    onRemoveImage={(imageUrl) => removeImage(selected.id, imageUrl)}
-                    onRemoveDocument={(_document, index) => removeDocument(selected.id, index)}
-                  />
-                  <LifecycleManager asset={selected} onAddLifecycle={(form) => addLifecycle(selected.id, form)} />
-                </div>
-              ) : (
-                <div className="panel empty-state">
-                  <Archive size={28} />
-                  <h2>Select an asset to edit</h2>
-                  <p>Choose an asset from the list to open its edit page.</p>
-                </div>
-              )
+            ) : (
+              <>
+                <AssetMediaPanel asset={selected} readOnly />
+                <HistoryPanel title="Lifecycle" items={selected.lifecycle} />
+              </>
             )}
           </>
-        ) : (
-          <div className="panel empty-state">
+        ) : !showAssetForm ? (
+          <div className="panel empty-state asset-empty-state">
             <Archive size={28} />
-            <h2>No assets found</h2>
-            <p>Add a new asset or clear the search filter.</p>
+            <h2>{user.role === "admin" ? "No assets yet" : "No assets available"}</h2>
+            <p>{user.role === "admin" ? "Create the first asset to start tracking lifecycle, service, and media records." : "No assets are available for this account right now."}</p>
+            {user.role === "admin" && (
+              <button className="primary" type="button" onClick={openAssetForm}>
+                <Plus size={16} /> Add asset
+              </button>
+            )}
           </div>
-        )}
+        ) : null}
       </div>
     </section>
   );
@@ -2024,7 +2046,7 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
   const activeStatuses = ["open", "in_review", "awaiting_client"];
   const sortedAppeals = [...scopedAppeals].sort((first, second) => new Date(second.updatedAt) - new Date(first.updatedAt));
   const activeAppeals = sortedAppeals.filter((appeal) => activeStatuses.includes(appeal.status));
-  const pastAppeals = sortedAppeals.filter((appeal) => ["resolved", "approved"].includes(appeal.status));
+  const pastAppeals = sortedAppeals.filter((appeal) => ["resolved", "approved", "closed"].includes(appeal.status));
 
   useEffect(() => {
     if (!scopedAppeals.length) {
@@ -2071,6 +2093,11 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
     setUploadingAppeal(true);
     setUploadError("");
     const asset = data.assets.find((item) => item.id === newIssue.assetId);
+    if (!asset) {
+      setUploadError("Select a valid asset before submitting the issue.");
+      setUploadingAppeal(false);
+      return;
+    }
     let attachments = [];
     try {
       if (newIssueFile) {
@@ -2161,14 +2188,14 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
             {activeAppeals.length > 0 ? activeAppeals.map(renderAppealCard) : <div className="empty-inline">No active appeals.</div>}
           </div>
         </div>
-        <div className="panel appeal-section">
-          <div className="panel-head">
-            <div>
-              <span className="eyebrow">Past records</span>
-              <h2>Resolved appeals</h2>
+          <div className="panel appeal-section">
+            <div className="panel-head">
+              <div>
+                <span className="eyebrow">Past records</span>
+              <h2>Resolved and closed appeals</h2>
+              </div>
+              <span className="badge resolved">{pastAppeals.length}</span>
             </div>
-            <span className="badge resolved">{pastAppeals.length}</span>
-          </div>
           <div className="appeal-list redesigned compact-appeals">
             {pastAppeals.length > 0 ? pastAppeals.map(renderAppealCard) : <div className="empty-inline">No past appeals yet.</div>}
           </div>
@@ -2283,8 +2310,13 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
           </div>
           <label>
             Asset
-            <select value={newIssue.assetId} onChange={(event) => setNewIssue((current) => ({ ...current, assetId: event.target.value }))}>
-              {scopedAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+            <select
+              value={newIssue.assetId}
+              onChange={(event) => setNewIssue((current) => ({ ...current, assetId: event.target.value }))}
+              disabled={scopedAssets.length === 0}
+              required
+            >
+              {scopedAssets.length === 0 ? <option value="">No assets available</option> : scopedAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
             </select>
           </label>
           <label>

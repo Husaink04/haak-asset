@@ -478,11 +478,14 @@ app.get("/api/assets", requireAuth, async (request, response) => {
   response.json(scopedAssets(state, request.auth));
 });
 
-app.post("/api/assets", requireAuth, requireAdmin, async (request, response) => {
+app.post("/api/assets", requireAuth, async (request, response) => {
   const state = await readState();
   const form = request.body || {};
   if (!form.assetCode || !form.name || !form.clientId) {
     return response.status(400).json({ error: "Asset code, name, and company are required." });
+  }
+  if (request.auth.role === "client" && form.clientId !== request.auth.clientId) {
+    return response.status(403).json({ error: "You can only add assets for your own company." });
   }
   if (!state.clients.some((client) => client.id === form.clientId)) {
     return response.status(400).json({ error: "Company does not exist." });

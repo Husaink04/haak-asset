@@ -1023,6 +1023,15 @@ small {
   min-width: 0;
 }
 
+.appeal-section,
+.conversation,
+.issue-form,
+.asset-wizard,
+.asset-detail,
+.asset-empty-state {
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.06);
+}
+
 .appeal-section h2 {
   margin-bottom: 0;
   line-height: 1.15;
@@ -1044,6 +1053,7 @@ small {
   text-align: left;
   box-shadow: none;
   transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  cursor: pointer;
 }
 
 .appeal-card:hover,
@@ -1113,7 +1123,7 @@ small {
 .company-row {
   width: 100%;
   display: grid;
-  grid-template-columns: 54px 1fr auto;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   border: 1px solid #e2e8f0;
@@ -1123,6 +1133,10 @@ small {
   text-align: left;
 }
 
+.asset-row {
+  cursor: pointer;
+}
+
 .asset-row span {
   min-width: 0;
 }
@@ -1130,6 +1144,36 @@ small {
 .asset-row small {
   display: block;
   line-height: 1.45;
+}
+
+.asset-row-content {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.asset-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.asset-row-edit {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--haak-red);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.asset-row-edit:hover {
+  border-color: var(--haak-red);
+  background: var(--haak-red-soft);
 }
 
 .asset-row:hover,
@@ -1216,6 +1260,30 @@ small {
   gap: 0;
   align-items: start;
   overflow: hidden;
+}
+
+.asset-empty-state {
+  display: grid;
+  gap: 12px;
+  align-content: center;
+  justify-items: start;
+  min-height: 320px;
+}
+
+.assets-page-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.assets-page-toolbar h2 {
+  margin: 6px 0 0;
+}
+
+.asset-workspace {
+  display: grid;
+  gap: 18px;
 }
 
 .asset-hero-image {
