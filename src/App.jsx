@@ -1090,13 +1090,6 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
           </div>
         </div>
 
-        <div className="stats-grid dashboard-kpis">
-          <Stat label="Managed assets" value={scopedAssets.length} icon={<Archive />} />
-          <Stat label="Client companies" value={data.clients.length} icon={<Building2 />} />
-          <Stat label="Open appeals" value={openAppeals.length} icon={<AlertCircle />} />
-          <Stat label="Service due" value={dueServices.length} icon={<History />} />
-        </div>
-
         <div className="dashboard-main-grid">
           <div className="panel dashboard-panel">
             <div className="panel-head">
