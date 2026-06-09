@@ -37,7 +37,14 @@ const distRoot = path.resolve(__dirname, "..", "dist");
 fs.mkdirSync(uploadRoot, { recursive: true });
 
 app.disable("x-powered-by");
-app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      "upgrade-insecure-requests": null
+    }
+  },
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 app.use(cors({ origin: origin.split(",").map((item) => item.trim()), credentials: false }));
 app.use(express.json({ limit: "2mb" }));
 app.use("/uploads", express.static(uploadRoot));
