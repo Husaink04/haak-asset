@@ -31,8 +31,9 @@ const USER_KEY = "haak-asset-management-user-v1";
 const VIEW_KEY = "haak-asset-management-view-v1";
 const PENDING_STATE_KEY = "haak-asset-management-pending-state-v1";
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:4000/api";
-const MAX_UPLOAD_MB = 10;
-const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+const DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = Number(import.meta.env.VITE_MAX_UPLOAD_BYTES || DEFAULT_MAX_UPLOAD_BYTES);
+const MAX_UPLOAD_MB = Math.max(1, Math.round(MAX_UPLOAD_BYTES / (1024 * 1024)));
 const IMAGE_UPLOAD_TYPES = new Set(["image/jpeg", "image/png"]);
 const DOCUMENT_UPLOAD_TYPES = new Set([
   "application/pdf",
@@ -279,10 +280,14 @@ async function uploadFile(file) {
   validateUploadFile(file);
   const formData = new FormData();
   formData.append("file", file);
-  return apiRequest("/upload", {
-    method: "POST",
-    body: formData
-  });
+  try {
+    return await apiRequest("/upload", {
+      method: "POST",
+      body: formData
+    });
+  } catch (error) {
+    throw new Error(formatUploadError(error, "file"));
+  }
 }
 
 function today() {
@@ -327,6 +332,37 @@ function resolveMediaUrl(value) {
   } catch {
     return raw;
   }
+}
+
+function documentLabel(value) {
+  if (!value) return "Document";
+  const raw = String(value).trim();
+  if (!raw) return "Document";
+  if (raw.startsWith("http") || raw.startsWith("/uploads/")) {
+    return fileNameFromUrl(raw);
+  }
+  return raw;
+}
+
+function isDocumentLink(value) {
+  const raw = String(value || "").trim();
+  return raw.startsWith("http") || raw.startsWith("/uploads/");
+}
+
+function formatUploadError(error, kind = "file") {
+  if (error?.message) return error.message;
+  return `Unable to upload ${kind}. Check the file type, size limit, and API connection.`;
+}
+
+function formatLifecycleDescription(item) {
+  const description = item?.description || "";
+  const type = String(item?.type || item?.serviceType || "").toLowerCase();
+  if (type === "document") {
+    return description
+      .replace(/(^|[\s])\/uploads\/[^\s]+(\sadded\.)?$/i, (_match, prefix = "", suffix = "") => `${prefix}${documentLabel(description)}${suffix || ""}`)
+      .replace(/^\/uploads\/.+$/i, documentLabel(description));
+  }
+  return description;
 }
 
 function normalizePhone(value) {
@@ -643,7 +679,7 @@ function CompanyForm({ onCreate }) {
       const result = await uploadFile(file);
       update("logoUrl", result.url);
     } catch (error) {
-      setUploadError(error.message);
+      setUploadError(formatUploadError(error, "logo"));
     } finally {
       setUploadingLogo(false);
       event.target.value = "";
@@ -785,9 +821,7 @@ function CompanyForm({ onCreate }) {
 function EngineerModal({ engineers, onClose, onCreate, onUpdateStatus }) {
   const [form, setForm] = useState({
     name: "",
-    email: "",
     phone: "",
-    specialization: "",
     status: "active"
   });
 
@@ -811,11 +845,9 @@ function EngineerModal({ engineers, onClose, onCreate, onUpdateStatus }) {
           </div>
           <button className="secondary modal-close" type="button" onClick={onClose}>Close</button>
         </div>
-        <form className="form-grid" onSubmit={submit}>
+        <form className="form-grid engineer-form-grid" onSubmit={submit}>
           <input placeholder="Engineer name" value={form.name} onChange={(event) => update("name", event.target.value)} required />
-          <input type="email" placeholder="Engineer email" value={form.email} onChange={(event) => update("email", event.target.value)} />
-          <input inputMode="numeric" placeholder="Phone" value={form.phone} onChange={(event) => update("phone", event.target.value)} />
-          <input placeholder="Specialization" value={form.specialization} onChange={(event) => update("specialization", event.target.value)} />
+          <input inputMode="numeric" placeholder="Phone number" value={form.phone} onChange={(event) => update("phone", event.target.value)} />
           <select value={form.status} onChange={(event) => update("status", event.target.value)}>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
@@ -828,7 +860,7 @@ function EngineerModal({ engineers, onClose, onCreate, onUpdateStatus }) {
             <div key={engineer.id} className="engineer-row">
               <div>
                 <strong>{engineer.name}</strong>
-                <small>{engineer.specialization || "General support"} / {engineer.email || "No email"}</small>
+                <small>{engineer.phone || "Phone not added yet"}</small>
               </div>
               <select value={engineer.status} onChange={(event) => onUpdateStatus(engineer.id, event.target.value)}>
                 <option value="active">Active</option>
@@ -912,7 +944,7 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
       const result = await uploadFile(file);
       update("logoUrl", result.url);
     } catch (error) {
-      setUploadError(error.message);
+      setUploadError(formatUploadError(error, "logo"));
     } finally {
       setUploadingLogo(false);
       event.target.value = "";
@@ -1298,7 +1330,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate }) {
       const result = await uploadFile(file);
       update("image", result.url);
     } catch (error) {
-      setUploadError(error.message);
+      setUploadError(formatUploadError(error, "image"));
     } finally {
       setUploadingImage(false);
       event.target.value = "";
@@ -1314,7 +1346,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate }) {
       const result = await uploadFile(file);
       setForm((current) => ({ ...current, documents: [...current.documents, result.url] }));
     } catch (error) {
-      setUploadError(error.message);
+      setUploadError(formatUploadError(error, "document"));
     } finally {
       setUploadingDocument(false);
       event.target.value = "";
@@ -1562,10 +1594,10 @@ function AssetForm({ clients, categories, existingAssets, onCreate }) {
                     {form.documents.map((document, index) => (
                       <div className="document-row" key={`${document}-${index}`}>
                         <Paperclip size={16} />
-                        {String(document).startsWith("http") ? (
-                        <a href={resolveMediaUrl(document)} target="_blank" rel="noreferrer">{fileNameFromUrl(document)}</a>
+                        {isDocumentLink(document) ? (
+                          <a href={resolveMediaUrl(document)} target="_blank" rel="noreferrer">{documentLabel(document)}</a>
                         ) : (
-                          <span>{document}</span>
+                          <span>{documentLabel(document)}</span>
                         )}
                         <button className="secondary inline-remove" type="button" onClick={() => removeDocument(index)}>Remove</button>
                       </div>
@@ -1628,7 +1660,7 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete }) {
       const result = await uploadFile(file);
       setForm((current) => ({ ...current, images: [result.url, ...(current.images || []).slice(1)] }));
     } catch (error) {
-      setUploadError(error.message);
+      setUploadError(formatUploadError(error, "image"));
     } finally {
       setUploadingImage(false);
       event.target.value = "";
@@ -1705,7 +1737,7 @@ function AssetMediaPanel({ asset, onAddImage, onAddDocument, onRemoveImage, onRe
       const result = await uploadFile(file);
       onAddImage(result.url);
     } catch (error) {
-      setUploadError(error.message);
+      setUploadError(formatUploadError(error, "image"));
     } finally {
       setUploadingImage(false);
       event.target.value = "";
@@ -1721,7 +1753,7 @@ function AssetMediaPanel({ asset, onAddImage, onAddDocument, onRemoveImage, onRe
       const result = await uploadFile(file);
       onAddDocument(result.url);
     } catch (error) {
-      setUploadError(error.message);
+      setUploadError(formatUploadError(error, "document"));
     } finally {
       setUploadingDocument(false);
       event.target.value = "";
@@ -1758,10 +1790,10 @@ function AssetMediaPanel({ asset, onAddImage, onAddDocument, onRemoveImage, onRe
         {asset.documents.length > 0 ? asset.documents.map((document, index) => (
           <div className="document-row" key={`${document}-${index}`}>
             <Paperclip size={16} />
-            {String(document).startsWith("http") ? (
-              <a href={resolveMediaUrl(document)} target="_blank" rel="noreferrer">{fileNameFromUrl(document)}</a>
+            {isDocumentLink(document) ? (
+              <a href={resolveMediaUrl(document)} target="_blank" rel="noreferrer">{documentLabel(document)}</a>
             ) : (
-              <span>{document}</span>
+              <span>{documentLabel(document)}</span>
             )}
             {!readOnly && <button className="secondary inline-remove" type="button" onClick={() => onRemoveDocument?.(document, index)}>Remove</button>}
           </div>
@@ -1799,7 +1831,7 @@ function LifecycleManager({ asset, onAddLifecycle }) {
           <div key={item.id} className="timeline-item">
             <small>{item.createdAt}</small>
             <strong>{item.type}</strong>
-            <p>{item.description}</p>
+            <p>{formatLifecycleDescription(item)}</p>
           </div>
         ))}
       </div>
@@ -1821,6 +1853,14 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
   const filtered = scopedAssets.filter((asset) =>
     [asset.name, asset.assetCode, asset.category, asset.serialNumber].join(" ").toLowerCase().includes(query.toLowerCase())
   );
+  const groupedAssets = user.role === "admin"
+    ? data.clients
+      .map((client) => ({
+        client,
+        assets: filtered.filter((asset) => asset.clientId === client.id)
+      }))
+      .filter((group) => group.assets.length > 0)
+    : [{ client: data.clients.find((client) => client.id === user.clientId), assets: filtered }];
 
   function createAsset(form) {
     const assetCode = generateAssetCode(data.clients, data.assets, form.clientId, form.category);
@@ -1942,7 +1982,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
           ? {
               ...asset,
               documents: [...asset.documents, documentName],
-              lifecycle: [...asset.lifecycle, { id: uid("l"), type: "Document", description: `${documentName} added.`, createdAt: today() }]
+              lifecycle: [...asset.lifecycle, { id: uid("l"), type: "Document", description: `${documentLabel(documentName)} added.`, createdAt: today() }]
             }
           : asset
       )
@@ -2015,15 +2055,27 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
           <div className="search"><Search size={16} /><input placeholder="Search assets" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
         </div>
         <div className="asset-list">
-          {filtered.map((asset) => (
-            <AssetRow
-              key={asset.id}
-              asset={asset}
-              client={data.clients.find((client) => client.id === asset.clientId)}
-              selected={selected?.id === asset.id}
-              onSelect={setSelectedId}
-            />
-          ))}
+          {groupedAssets.length > 0 ? groupedAssets.map(({ client, assets }) => (
+            <section className="asset-client-group" key={client?.id || "ungrouped"}>
+              <div className="asset-client-group-head">
+                <div>
+                  <strong>{client?.companyName || "Unassigned company"}</strong>
+                  <small>{assets.length} asset{assets.length === 1 ? "" : "s"}</small>
+                </div>
+              </div>
+              <div className="asset-client-group-list">
+                {assets.map((asset) => (
+                  <AssetRow
+                    key={asset.id}
+                    asset={asset}
+                    client={client}
+                    selected={selected?.id === asset.id}
+                    onSelect={setSelectedId}
+                  />
+                ))}
+              </div>
+            </section>
+          )) : <div className="empty-inline">No assets match this search.</div>}
         </div>
       </div>
       <div className="asset-workspace">
@@ -2155,7 +2207,7 @@ function HistoryPanel({ title, items }) {
           <div key={item.id} className="timeline-item">
             <small>{item.createdAt || item.serviceDate}</small>
             <strong>{item.type || item.serviceType}</strong>
-            <p>{item.description}</p>
+            <p>{formatLifecycleDescription(item)}</p>
           </div>
         ))}
       </div>
@@ -2229,7 +2281,7 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
         attachments = [await uploadFile(newIssueFile)];
       }
     } catch (error) {
-      setUploadError(error.message);
+      setUploadError(formatUploadError(error, "attachment"));
       setUploadingAppeal(false);
       return;
     }
@@ -2993,9 +3045,9 @@ export default function App() {
     const engineer = {
       id: uid("eng"),
       name: form.name.trim(),
-      email: form.email.trim(),
       phone: form.phone.trim(),
-      specialization: form.specialization.trim(),
+      email: "",
+      specialization: "",
       status: form.status || "active"
     };
     setData((current) => ({
