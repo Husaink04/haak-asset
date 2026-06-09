@@ -36,7 +36,18 @@ const distRoot = path.resolve(__dirname, "..", "dist");
 
 fs.mkdirSync(uploadRoot, { recursive: true });
 
+function wrapAsync(handler) {
+  if (typeof handler !== "function" || handler.length === 4) return handler;
+  return (request, response, next) => Promise.resolve(handler(request, response, next)).catch(next);
+}
+
+for (const method of ["get", "post", "put", "delete"]) {
+  const original = app[method].bind(app);
+  app[method] = (pathOrRoute, ...handlers) => original(pathOrRoute, ...handlers.map(wrapAsync));
+}
+
 app.disable("x-powered-by");
+app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS || 1));
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -103,6 +114,25 @@ function publicState(state) {
     ...state,
     users: state.users.map(publicUser)
   };
+}
+
+function duplicateValues(values) {
+  const seen = new Set();
+  const duplicates = new Set();
+  for (const value of values.filter(Boolean)) {
+    const normalized = String(value).trim().toLowerCase();
+    if (seen.has(normalized)) duplicates.add(value);
+    seen.add(normalized);
+  }
+  return [...duplicates];
+}
+
+function sendApiError(response, error) {
+  if (error?.code === "23505") {
+    return response.status(409).json({ error: "Duplicate record detected. Check unique fields such as asset code, email, or stored file name." });
+  }
+  console.error(error);
+  return response.status(500).json({ error: "Server error. Please try again." });
 }
 
 async function normalizePasswords(state) {
@@ -293,15 +323,24 @@ app.get("/api/state", requireAuth, async (_request, response) => {
 });
 
 app.put("/api/state", requireAuth, async (request, response) => {
-  const nextState = request.body;
-  if (!nextState || !Array.isArray(nextState.users) || !Array.isArray(nextState.clients) || !Array.isArray(nextState.assets)) {
-    return response.status(400).json({ error: "Invalid app state payload." });
-  }
+  try {
+    const nextState = request.body;
+    if (!nextState || !Array.isArray(nextState.users) || !Array.isArray(nextState.clients) || !Array.isArray(nextState.assets)) {
+      return response.status(400).json({ error: "Invalid app state payload." });
+    }
 
-  const currentState = await readState();
-  const mergedState = await mergePasswords(nextState, currentState);
-  await writeState(mergedState);
-  response.json(publicState(mergedState));
+    const duplicateAssetCodes = duplicateValues(nextState.assets.map((asset) => asset.assetCode));
+    if (duplicateAssetCodes.length > 0) {
+      return response.status(409).json({ error: `Duplicate asset code found: ${duplicateAssetCodes.join(", ")}.` });
+    }
+
+    const currentState = await readState();
+    const mergedState = await mergePasswords(nextState, currentState);
+    await writeState(mergedState);
+    response.json(publicState(mergedState));
+  } catch (error) {
+    sendApiError(response, error);
+  }
 });
 
 app.get("/api/users/me", requireAuth, async (request, response) => {
@@ -620,38 +659,42 @@ app.delete("/api/files/:id", requireAuth, requireAdmin, async (request, response
 
 app.post("/api/upload", requireAuth, (request, response) => {
   upload.single("file")(request, response, async (error) => {
-    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
-      return response.status(400).json({ error: "File must be 10 MB or smaller." });
-    }
-    if (error) {
-      return response.status(400).json({ error: error.message || "A valid file is required." });
-    }
-    if (!request.file) {
-      return response.status(400).json({ error: "A valid file is required." });
-    }
+    try {
+      if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+        return response.status(400).json({ error: "File must be 10 MB or smaller." });
+      }
+      if (error) {
+        return response.status(400).json({ error: error.message || "A valid file is required." });
+      }
+      if (!request.file) {
+        return response.status(400).json({ error: "A valid file is required." });
+      }
 
-    const publicBaseUrl = process.env.PUBLIC_API_URL || `http://127.0.0.1:${port}`;
-    const url = `${publicBaseUrl}/uploads/${request.file.filename}`;
-    const record = {
-      id: uid("file"),
-      uploadedBy: request.auth.sub,
-      originalName: request.file.originalname,
-      storedName: request.file.filename,
-      mimeType: request.file.mimetype,
-      sizeBytes: request.file.size,
-      url,
-      entityType: request.body?.entityType,
-      entityId: request.body?.entityId
-    };
-    await createUploadedFile(record);
+      const publicBaseUrl = process.env.PUBLIC_API_URL || `http://127.0.0.1:${port}`;
+      const url = `${publicBaseUrl}/uploads/${request.file.filename}`;
+      const record = {
+        id: uid("file"),
+        uploadedBy: request.auth.sub,
+        originalName: request.file.originalname,
+        storedName: request.file.filename,
+        mimeType: request.file.mimetype,
+        sizeBytes: request.file.size,
+        url,
+        entityType: request.body?.entityType,
+        entityId: request.body?.entityId
+      };
+      await createUploadedFile(record);
 
-    response.json({
-      id: record.id,
-      fileName: request.file.originalname,
-      mimeType: request.file.mimetype,
-      size: request.file.size,
-      url
-    });
+      response.json({
+        id: record.id,
+        fileName: request.file.originalname,
+        mimeType: request.file.mimetype,
+        size: request.file.size,
+        url
+      });
+    } catch (uploadError) {
+      sendApiError(response, uploadError);
+    }
   });
 });
 
@@ -664,6 +707,11 @@ if (process.env.NODE_ENV === "production" && fs.existsSync(distRoot)) {
     response.sendFile(path.join(distRoot, "index.html"));
   });
 }
+
+app.use((error, _request, response, next) => {
+  if (response.headersSent) return next(error);
+  return sendApiError(response, error);
+});
 
 ensureSchema()
   .then(() => {
