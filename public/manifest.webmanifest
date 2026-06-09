@@ -1,0 +1,24 @@
+{
+  "name": "HAAK INFOTECH Asset Management",
+  "short_name": "HAAK Assets",
+  "description": "Asset lifecycle, service history, and client issue tracking for HAAK INFOTECH.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020b18",
+  "theme_color": "#020b18",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+
+> haak-asset-management-pwa@0.1.0 dev:api
+> node server/index.js
+
+HAAK Asset API listening on http://127.0.0.1:4000

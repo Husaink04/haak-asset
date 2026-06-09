@@ -1,0 +1,42 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        VITE_API_URL: /api
+    container_name: haak-assets-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://haak_assets:${POSTGRES_PASSWORD}@db:5432/haak_assets
+      API_PORT: 4000
+      VITE_API_URL: /api
+      UPLOAD_DIR: uploads
+    ports:
+      - "${APP_PORT:-4000}:4000"
+    volumes:
+      - uploads:/app/uploads
+
+  db:
+    image: postgres:16-alpine
+    container_name: haak-assets-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: haak_assets
+      POSTGRES_USER: haak_assets
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U haak_assets -d haak_assets"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+  uploads:
