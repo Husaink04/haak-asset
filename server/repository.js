@@ -57,6 +57,7 @@ export async function ensureNormalizedSchema() {
       asset_code TEXT NOT NULL UNIQUE,
       client_id TEXT NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
       name TEXT NOT NULL,
+      user_name TEXT NOT NULL DEFAULT '',
       category TEXT NOT NULL DEFAULT '',
       brand TEXT NOT NULL DEFAULT '',
       model TEXT NOT NULL DEFAULT '',
@@ -70,6 +71,7 @@ export async function ensureNormalizedSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS user_name TEXT NOT NULL DEFAULT ''");
 
   await query(`
     CREATE TABLE IF NOT EXISTS asset_categories (
@@ -265,6 +267,7 @@ export async function readState() {
       assetCode: asset.asset_code,
       clientId: asset.client_id,
       name: asset.name,
+      userName: asset.user_name,
       category: asset.category,
       brand: asset.brand,
       model: asset.model,
@@ -382,13 +385,14 @@ async function writeStateOnce(state) {
 
     for (const asset of state.assets || []) {
       await client.query(
-        `INSERT INTO assets (id, asset_code, client_id, name, category, brand, model, serial_number, purchase_date, warranty_end_date, location, status, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        `INSERT INTO assets (id, asset_code, client_id, name, user_name, category, brand, model, serial_number, purchase_date, warranty_end_date, location, status, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
         [
           asset.id,
           asset.assetCode,
           asset.clientId,
           asset.name,
+          asset.userName || "",
           asset.category || "",
           asset.brand || "",
           asset.model || "",

@@ -496,6 +496,7 @@ app.post("/api/assets", requireAuth, requireAdmin, async (request, response) => 
     assetCode: form.assetCode,
     clientId: form.clientId,
     name: form.name,
+    userName: form.userName || "",
     category: form.category || "",
     brand: form.brand || "",
     model: form.model || "",
