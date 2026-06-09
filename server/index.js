@@ -127,6 +127,12 @@ function duplicateValues(values) {
   return [...duplicates];
 }
 
+function hasDuplicateAssetCode(assets, assetCode, excludeId = null) {
+  const normalizedCode = String(assetCode || "").trim().toLowerCase();
+  if (!normalizedCode) return false;
+  return assets.some((asset) => asset.id !== excludeId && String(asset.assetCode || "").trim().toLowerCase() === normalizedCode);
+}
+
 function sendApiError(response, error) {
   if (error?.code === "23505") {
     return response.status(409).json({ error: "Duplicate record detected. Check unique fields such as asset code, email, or stored file name." });
@@ -481,6 +487,9 @@ app.post("/api/assets", requireAuth, requireAdmin, async (request, response) => 
   if (!state.clients.some((client) => client.id === form.clientId)) {
     return response.status(400).json({ error: "Company does not exist." });
   }
+  if (hasDuplicateAssetCode(state.assets, form.assetCode)) {
+    return response.status(409).json({ error: `Asset code ${form.assetCode} already exists.` });
+  }
 
   const asset = {
     id: form.id || uid("a"),
@@ -510,6 +519,9 @@ app.put("/api/assets/:id", requireAuth, requireAdmin, async (request, response) 
   const existing = state.assets.find((asset) => asset.id === request.params.id);
   if (!existing) return response.status(404).json({ error: "Asset not found." });
   const asset = { ...existing, ...request.body, id: existing.id };
+  if (hasDuplicateAssetCode(state.assets, asset.assetCode, existing.id)) {
+    return response.status(409).json({ error: `Asset code ${asset.assetCode} already exists.` });
+  }
   const nextState = { ...state, assets: state.assets.map((item) => (item.id === existing.id ? asset : item)) };
   await writeState(nextState);
   response.json(asset);

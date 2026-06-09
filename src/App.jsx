@@ -233,6 +233,10 @@ function clearPendingState() {
   localStorage.removeItem(PENDING_STATE_KEY);
 }
 
+function isConflictError(error) {
+  return error?.isApiError && error?.status === 409;
+}
+
 async function apiRequest(path, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
   const isFormData = options.body instanceof FormData;
@@ -332,9 +336,28 @@ function generateAssetCode(clients, assets, clientId, category, existingId = nul
   const client = clients.find((item) => item.id === clientId);
   const companyToken = codeToken(client?.companyName, "COMP");
   const categoryToken = codeToken(category, "GEN");
-  const matchingAssets = assets.filter((asset) => asset.id !== existingId && asset.clientId === clientId && asset.category === category);
-  const nextSerial = String(matchingAssets.length + 1).padStart(3, "0");
+  const prefix = `${companyToken}-${categoryToken}-`;
+  const nextSerialNumber = assets
+    .filter((asset) => asset.id !== existingId && asset.clientId === clientId && asset.category === category)
+    .reduce((highest, asset) => {
+      if (!String(asset.assetCode || "").startsWith(prefix)) return highest;
+      const serial = Number.parseInt(String(asset.assetCode).slice(prefix.length), 10);
+      return Number.isFinite(serial) ? Math.max(highest, serial) : highest;
+    }, 0) + 1;
+  const nextSerial = String(nextSerialNumber).padStart(3, "0");
   return `${companyToken}-${categoryToken}-${nextSerial}`;
+}
+
+function duplicateAssetCodes(assets) {
+  const seen = new Set();
+  const duplicates = new Set();
+  for (const asset of assets || []) {
+    const normalized = String(asset?.assetCode || "").trim().toLowerCase();
+    if (!normalized) continue;
+    if (seen.has(normalized)) duplicates.add(asset.assetCode);
+    seen.add(normalized);
+  }
+  return [...duplicates];
 }
 
 function uid(prefix) {
@@ -1784,9 +1807,10 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
   );
 
   function createAsset(form) {
+    const assetCode = generateAssetCode(data.clients, data.assets, form.clientId, form.category);
     const asset = {
       id: uid("a"),
-      assetCode: generateAssetCode(data.clients, data.assets, form.clientId, form.category),
+      assetCode,
       clientId: form.clientId,
       name: form.name,
       category: form.category,
@@ -1802,6 +1826,10 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
       documents: form.documents || [],
       lifecycle: [{ id: uid("l"), type: "Created", description: "Asset created by admin.", createdAt: today() }]
     };
+    if (duplicateAssetCodes([asset, ...data.assets]).length > 0) {
+      notify(`Asset code ${assetCode} already exists. Refresh the page or edit the conflicting asset first.`, "error");
+      return;
+    }
     setData((current) => ({ ...current, assets: [asset, ...current.assets] }));
     setSelectedId(asset.id);
     setAdminAssetView("details");
@@ -1827,11 +1855,11 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
   }
 
   function updateAsset(form) {
-    setData((current) => ({
-      ...current,
-      assets: current.assets.map((asset) => {
+    let blocked = false;
+    setData((current) => {
+      const nextAssetCode = generateAssetCode(current.clients, current.assets, form.clientId, form.category, form.id);
+      const nextAssets = current.assets.map((asset) => {
         if (asset.id !== form.id) return asset;
-        const nextAssetCode = generateAssetCode(current.clients, current.assets, form.clientId, form.category, form.id);
         const lifecycle = [...asset.lifecycle];
         if (asset.clientId !== form.clientId) {
           const client = current.clients.find((item) => item.id === form.clientId);
@@ -1842,8 +1870,17 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
         }
         lifecycle.push({ id: uid("l"), type: "Updated", description: "Asset details updated by admin.", createdAt: today() });
         return { ...asset, ...form, assetCode: nextAssetCode, lifecycle };
-      })
-    }));
+      });
+      if (duplicateAssetCodes(nextAssets).length > 0) {
+        blocked = true;
+        return current;
+      }
+      return { ...current, assets: nextAssets };
+    });
+    if (blocked) {
+      notify("This asset still conflicts with another asset code. Change the company or category, or remove the duplicate asset.", "error");
+      return;
+    }
     setAdminAssetView("details");
     notify(`Updated ${form.name}.`);
   }
@@ -2797,10 +2834,13 @@ export default function App() {
           setPendingSync(false);
           setApiStatus("connected");
         })
-        .catch(() => {
+        .catch((error) => {
           if (cancelled) return;
-          setApiStatus("offline");
+          setApiStatus(isConflictError(error) ? "conflict" : "offline");
           setPendingSync(true);
+          if (isConflictError(error)) {
+            notify(error.message || "Sync conflict. Resolve duplicate records and save again.", "error");
+          }
         });
       return () => {
         cancelled = true;
@@ -2876,9 +2916,12 @@ export default function App() {
       setPendingSync(false);
       setApiStatus("connected");
       return true;
-    } catch {
-      setApiStatus("offline");
+    } catch (error) {
+      setApiStatus(isConflictError(error) ? "conflict" : "offline");
       setPendingSync(true);
+      if (isConflictError(error)) {
+        notify(error.message || "Sync conflict. Resolve duplicate records and save again.", "error");
+      }
       return false;
     }
   }
@@ -2902,10 +2945,13 @@ export default function App() {
       setApiStatus("connected");
       clearPendingState();
       setPendingSync(false);
-    } catch {
+    } catch (error) {
       queuePendingState(nextState);
       setPendingSync(true);
-      setApiStatus("offline");
+      setApiStatus(isConflictError(error) ? "conflict" : "offline");
+      if (isConflictError(error)) {
+        notify(error.message || "Sync conflict. Resolve duplicate records and save again.", "error");
+      }
     }
   }
 
@@ -3146,10 +3192,14 @@ export default function App() {
       setUser(null);
     }}
     >
-      {apiStatus === "offline" && (
+      {(apiStatus === "offline" || apiStatus === "conflict") && (
         <div className="api-banner">
-          {pendingSync ? "Offline mode: changes are queued and will sync when the API is available." : "Backend is offline. You can keep viewing cached data."}
-          {pendingSync && <button type="button" onClick={syncPendingState}>Retry sync</button>}
+          {apiStatus === "conflict"
+            ? "Sync blocked: duplicate or conflicting data was detected. Fix the conflicting record and save again."
+            : pendingSync
+              ? "Offline mode: changes are queued and will sync when the API is available."
+              : "Backend is offline. You can keep viewing cached data."}
+          {pendingSync && apiStatus !== "conflict" && <button type="button" onClick={syncPendingState}>Retry sync</button>}
         </div>
       )}
       {view === "dashboard" && <Dashboard user={user} data={data} scopedAssets={scopedAssets} scopedAppeals={scopedAppeals} clientBrand={clientBrand} setData={setData} />}
