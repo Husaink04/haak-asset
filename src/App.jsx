@@ -288,6 +288,12 @@ function isConflictError(error) {
   return error?.isApiError && error?.status === 409;
 }
 
+function clearStoredSession() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(VIEW_KEY);
+}
+
 async function apiRequest(path, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
   const isFormData = options.body instanceof FormData;
@@ -310,6 +316,10 @@ async function apiRequest(path, options = {}) {
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401) {
+      clearStoredSession();
+      window.setTimeout(() => window.location.reload(), 0);
+    }
     const error = new Error(body.error || "API request failed.");
     error.status = response.status;
     error.detail = body.detail;
@@ -4141,9 +4151,7 @@ export default function App() {
         onMarkNotificationsRead={markNotificationsRead}
         onClearNotifications={clearNotifications}
         onLogout={() => {
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
-        localStorage.removeItem(VIEW_KEY);
+        clearStoredSession();
         setViewState("dashboard");
         setUser(null);
       }}>
@@ -4168,9 +4176,7 @@ export default function App() {
       onClearNotifications={clearNotifications}
       headerAction={null}
       onLogout={() => {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-      localStorage.removeItem(VIEW_KEY);
+      clearStoredSession();
       setViewState("dashboard");
       setUser(null);
     }}
