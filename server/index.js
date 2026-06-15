@@ -152,6 +152,21 @@ function isEmailEnabled() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
+function smtpConfigStatus() {
+  const missing = [];
+  if (!process.env.SMTP_HOST) missing.push("SMTP_HOST");
+  if (!process.env.SMTP_USER) missing.push("SMTP_USER");
+  if (!process.env.SMTP_PASS) missing.push("SMTP_PASS");
+  return {
+    configured: missing.length === 0,
+    missing
+  };
+}
+
+function smtpErrorDetail(error) {
+  return error?.response || error?.message || error?.code || error?.responseCode || "SMTP_ERROR";
+}
+
 let mailTransporter = null;
 
 function getMailTransporter() {
@@ -949,12 +964,19 @@ app.post("/api/email/admin-alert/test", requireAuth, requireAdmin, async (reques
   if (!validateEmail(email)) {
     return response.status(400).json({ error: "Enter a valid admin alert email address." });
   }
+  const smtp = smtpConfigStatus();
+  if (!smtp.configured) {
+    return response.status(503).json({
+      error: "SMTP email is not configured on the server.",
+      detail: `Set ${smtp.missing.join(", ")} in /opt/haak-asset/.env and restart Docker.`
+    });
+  }
   try {
     const result = await sendAdminAlertTestEmail(email);
     response.json({ ok: result.sent > 0, email, result });
   } catch (error) {
     console.warn("Admin alert test email failed:", error);
-    response.status(502).json({ error: "Unable to send test email.", detail: error.code || error.responseCode || "SMTP_ERROR" });
+    response.status(502).json({ error: "Unable to send test email.", detail: smtpErrorDetail(error) });
   }
 });
 

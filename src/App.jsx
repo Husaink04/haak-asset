@@ -320,7 +320,10 @@ async function apiRequest(path, options = {}) {
 }
 
 function friendlyErrorMessage(error, fallback = FRIENDLY_ERROR_MESSAGE) {
-  if (error?.isNetworkError || error?.isApiError) return fallback;
+  if (error?.isNetworkError) return fallback;
+  if (error?.isApiError) {
+    return [error.message, error.detail].filter(Boolean).join(" ");
+  }
   return error?.message || fallback;
 }
 
@@ -3868,8 +3871,6 @@ export default function App() {
     } catch (error) {
       if (error?.status === 404) {
         notify("Email test is not available on the running backend. Restart the backend and try again.", "error");
-      } else if (error?.status === 502) {
-        notify(`Unable to send test email. ${error.detail ? `SMTP error: ${error.detail}.` : "Check SMTP settings."}`, "error");
       } else {
         notify(friendlyErrorMessage(error), "error");
       }
