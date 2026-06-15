@@ -1150,10 +1150,11 @@ header h1 {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
-.admin-dashboard {
+.admin-dashboard,
+.client-dashboard {
   display: grid;
   gap: 20px;
   min-width: 0;
@@ -1161,9 +1162,10 @@ header h1 {
 
 .dashboard-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 22px;
   align-items: center;
+  padding: 24px;
   border-top: 4px solid var(--haak-red);
   background:
     linear-gradient(135deg, rgba(239, 31, 36, 0.08), rgba(255, 255, 255, 0) 42%),
@@ -1171,8 +1173,8 @@ header h1 {
 }
 
 .dashboard-hero h2 {
-  margin: 6px 0 8px;
-  font-size: 30px;
+  margin: 6px 0 10px;
+  font-size: 28px;
   line-height: 1.12;
 }
 
@@ -1186,7 +1188,7 @@ header h1 {
 .client-dashboard-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
-  gap: 18px;
+  gap: 22px;
   align-items: center;
   padding: 24px;
   background:
@@ -1230,14 +1232,16 @@ header h1 {
 .dashboard-health {
   display: grid;
   grid-template-columns: repeat(3, minmax(92px, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .dashboard-health span {
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 12px;
+  min-height: 86px;
+  align-content: center;
+  padding: 14px 12px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #f8fafc;
@@ -1248,19 +1252,29 @@ header h1 {
 
 .dashboard-health strong {
   color: var(--haak-ink);
-  font-size: 24px;
+  font-size: 26px;
+  line-height: 1;
 }
 
 .dashboard-kpis .stat {
-  min-height: 132px;
+  min-height: 124px;
 }
 
 .dashboard-main-grid,
-.dashboard-lower-grid {
+.dashboard-lower-grid,
+.client-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
   align-items: start;
+}
+
+.client-dashboard-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.82fr);
+}
+
+.client-dashboard-grid > .panel:first-child {
+  grid-row: span 2;
 }
 
 .dashboard-panel {
@@ -1269,15 +1283,16 @@ header h1 {
 
 .dashboard-list {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .dashboard-list-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: 16px;
   align-items: center;
-  padding: 14px;
+  min-height: 86px;
+  padding: 14px 16px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fff;
@@ -1313,6 +1328,9 @@ header h1 {
 }
 
 .stat {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 118px;
   padding: 18px;
   border-radius: 8px;
   background: #fff;
@@ -1321,13 +1339,21 @@ header h1 {
 }
 
 .stat div {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
   color: var(--haak-red);
+  background: var(--haak-red-soft);
+  border-radius: 8px;
 }
 
 .stat strong {
   display: block;
-  margin-top: 10px;
-  font-size: 31px;
+  align-self: end;
+  margin-top: 14px;
+  font-size: 32px;
+  line-height: 1;
 }
 
 .stat span,
@@ -3022,6 +3048,7 @@ dl dt {
   .dashboard-hero,
   .dashboard-main-grid,
   .dashboard-lower-grid,
+  .client-dashboard-grid,
   .service-layout,
   .assets-layout,
   .admin-assets-layout,
@@ -3142,6 +3169,10 @@ dl dt {
 
   .dashboard-health {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .client-dashboard-grid > .panel:first-child {
+    grid-row: auto;
   }
 
   .service-summary {

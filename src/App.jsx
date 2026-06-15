@@ -1567,8 +1567,11 @@ function CompaniesPage({ user, data, setData, notify }) {
 
 function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
   const scopedServiceRecords = getScopedServiceRecords(data.serviceRecords, scopedAssets);
+  const serviceWindowEnd = new Date();
+  serviceWindowEnd.setDate(serviceWindowEnd.getDate() + 30);
+  const serviceWindowEndKey = serviceWindowEnd.toISOString().slice(0, 10);
   const openAppeals = scopedAppeals.filter((appeal) => !["resolved", "closed", "approved"].includes(appeal.status) && isPriorityAppeal(appeal));
-  const dueServices = scopedServiceRecords.filter((record) => isPriorityServiceRecord(record) && record.nextServiceDue && record.nextServiceDue <= "2026-06-30");
+  const dueServices = scopedServiceRecords.filter((record) => isPriorityServiceRecord(record) && record.nextServiceDue && record.nextServiceDue <= serviceWindowEndKey);
   const inServiceAssets = scopedAssets.filter((asset) => ["in_service", "repairing"].includes(asset.status));
   const attentionAssets = scopedAssets.filter(isPriorityAsset);
   const recentAppeals = [...openAppeals].sort((first, second) => new Date(second.updatedAt) - new Date(first.updatedAt)).slice(0, 4);
@@ -1589,6 +1592,13 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
             <span><strong>{scopedAssets.length}</strong> Assets</span>
             <span><strong>{openAppeals.length}</strong> Open issues</span>
           </div>
+        </div>
+
+        <div className="stats-grid dashboard-kpis">
+          <Stat label="Companies" value={data.clients.length} icon={<Building2 />} />
+          <Stat label="Total assets" value={scopedAssets.length} icon={<Archive />} />
+          <Stat label="Priority issues" value={openAppeals.length} icon={<AlertCircle />} />
+          <Stat label="Service due" value={dueServices.length} icon={<History />} />
         </div>
 
         <div className="dashboard-main-grid">
@@ -1659,7 +1669,7 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
   }
 
   return (
-    <section className="page-grid">
+    <section className="client-dashboard">
       <div className="panel client-dashboard-hero">
         <div>
           <span className="eyebrow">Welcome back</span>
@@ -1682,39 +1692,41 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
         <Stat label="Under repair" value={inServiceAssets.length} icon={<Clock />} />
         <Stat label="Service due" value={dueServices.length} icon={<History />} />
       </div>
-      <CollapsiblePanel title="Service history" badge={<span className="badge active">{recentServiceHistory.length}</span>}>
-        <div className="timeline">
-          {recentServiceHistory.length > 0 ? recentServiceHistory.map((record) => {
-            const asset = scopedAssets.find((item) => item.id === record.assetId);
-            return (
-              <div key={record.id} className="timeline-item">
-                <small>{record.serviceDate || "Not recorded"}</small>
-                <strong>{asset?.name || "Unknown asset"} - {record.serviceType}</strong>
-                <p>{record.description}</p>
-                <small>{formatStatusLabel(record.status)}</small>
+      <div className="client-dashboard-grid">
+        <CollapsiblePanel title="Service history" badge={<span className="badge active">{recentServiceHistory.length}</span>}>
+          <div className="timeline">
+            {recentServiceHistory.length > 0 ? recentServiceHistory.map((record) => {
+              const asset = scopedAssets.find((item) => item.id === record.assetId);
+              return (
+                <div key={record.id} className="timeline-item">
+                  <small>{record.serviceDate || "Not recorded"}</small>
+                  <strong>{asset?.name || "Unknown asset"} - {record.serviceType}</strong>
+                  <p>{record.description}</p>
+                  <small>{formatStatusLabel(record.status)}</small>
+                </div>
+              );
+            }) : <div className="empty-inline">No service history yet.</div>}
+          </div>
+        </CollapsiblePanel>
+        <CollapsiblePanel title="Priority appeal history" badge={<span className="badge open">{recentAppeals.length}</span>}>
+          <div className="timeline">
+            {recentAppeals.length > 0 ? recentAppeals.map((appeal) => (
+              <div key={appeal.id} className="timeline-item">
+                <span className={statusClass(appeal.status)}>{formatStatusLabel(appeal.status)}</span>
+                <strong>{appeal.title}</strong>
+                <p>{appeal.description}</p>
               </div>
-            );
-          }) : <div className="empty-inline">No service history yet.</div>}
-        </div>
-      </CollapsiblePanel>
-      <CollapsiblePanel title="Priority appeal history" badge={<span className="badge open">{recentAppeals.length}</span>}>
-        <div className="timeline">
-          {recentAppeals.length > 0 ? recentAppeals.map((appeal) => (
-            <div key={appeal.id} className="timeline-item">
-              <span className={statusClass(appeal.status)}>{formatStatusLabel(appeal.status)}</span>
-              <strong>{appeal.title}</strong>
-              <p>{appeal.description}</p>
-            </div>
-          )) : <div className="empty-inline">No appeal history yet.</div>}
-        </div>
-      </CollapsiblePanel>
-      <CollapsiblePanel title="Priority assets" badge={<span className="badge in-service">{attentionAssets.length}</span>}>
-        <div className="asset-list compact">
-          {attentionAssets.length > 0 ? attentionAssets.map((asset) => (
-            <AssetRow key={asset.id} asset={asset} client={data.clients.find((client) => client.id === asset.clientId)} />
-          )) : <div className="empty-inline">All assets are currently active.</div>}
-        </div>
-      </CollapsiblePanel>
+            )) : <div className="empty-inline">No appeal history yet.</div>}
+          </div>
+        </CollapsiblePanel>
+        <CollapsiblePanel title="Priority assets" badge={<span className="badge in-service">{attentionAssets.length}</span>}>
+          <div className="asset-list compact">
+            {attentionAssets.length > 0 ? attentionAssets.map((asset) => (
+              <AssetRow key={asset.id} asset={asset} client={data.clients.find((client) => client.id === asset.clientId)} />
+            )) : <div className="empty-inline">All assets are currently active.</div>}
+          </div>
+        </CollapsiblePanel>
+      </div>
     </section>
   );
 }
