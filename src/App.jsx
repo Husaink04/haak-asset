@@ -8,8 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  ChevronLeft,
-  ChevronRight,
   Eye,
   EyeOff,
   FileText,
@@ -40,12 +38,6 @@ const TOKEN_KEY = "haak-asset-management-token-v1";
 const USER_KEY = "haak-asset-management-user-v1";
 const VIEW_KEY = "haak-asset-management-view-v1";
 const PENDING_STATE_KEY = "haak-asset-management-pending-state-v1";
-<<<<<<< HEAD
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:4000/api";
-const DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-const MAX_UPLOAD_BYTES = Number(import.meta.env.VITE_MAX_UPLOAD_BYTES || DEFAULT_MAX_UPLOAD_BYTES);
-const MAX_UPLOAD_MB = Math.max(1, Math.round(MAX_UPLOAD_BYTES / (1024 * 1024)));
-=======
 const THEME_KEY = "haak-asset-management-theme-v1";
 const API_URL = import.meta.env.VITE_API_URL || "/api";
 const MAX_UPLOAD_MB = 10;
@@ -65,7 +57,6 @@ const SERVICE_DUE_TERMS = [
   { label: "6M", months: 6 },
   { label: "1Y", months: 12 }
 ];
->>>>>>> 4402920 (Updated Asset management app)
 const IMAGE_UPLOAD_TYPES = new Set(["image/jpeg", "image/png"]);
 const DOCUMENT_UPLOAD_TYPES = new Set([
   "application/pdf",
@@ -744,10 +735,6 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-<<<<<<< HEAD
-function Shell({ user, children, view, setView, onLogout, headerAction, notice, clientBrand }) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("haak-sidebar-collapsed") === "1");
-=======
 function AdminIdentityBadge({ apiStatus }) {
   const isOnline = apiStatus === "connected";
   return (
@@ -812,7 +799,6 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const isDarkTheme = theme === "dark";
->>>>>>> 4402920 (Updated Asset management app)
   const nav = user.role === "admin"
     ? [
         ["dashboard", "Dashboard", Archive],
@@ -835,13 +821,9 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
   }, [sidebarCollapsed]);
 
   return (
-<<<<<<< HEAD
-    <div className={`app-shell ${user.role}-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
-=======
     <>
       <Toaster richColors closeButton position="top-right" />
       <div className={`app-shell ${user.role}-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
->>>>>>> 4402920 (Updated Asset management app)
       <aside>
         <div className="logo">
           <img src="/haak-logo-transparent.png" alt="HAAK INFOTECH" />
@@ -849,13 +831,8 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
         </div>
         <nav>
           {nav.map(([id, label, Icon]) => (
-<<<<<<< HEAD
-            <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)} aria-label={label}>
-              <Icon size={18} /> <span className="nav-label">{label}</span>
-=======
             <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)} title={sidebarCollapsed ? label : undefined} aria-label={label}>
               <Icon size={18} /> <span>{label}</span>
->>>>>>> 4402920 (Updated Asset management app)
             </button>
           ))}
           <button className={showNotifications ? "active" : ""} type="button" onClick={() => setShowNotifications((current) => !current)} title={sidebarCollapsed ? "Notifications" : undefined} aria-label="Notifications">
@@ -864,13 +841,6 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
             {unreadCount > 0 && <small className="sidebar-count">{unreadCount}</small>}
           </button>
         </nav>
-<<<<<<< HEAD
-        <button className="sidebar-toggle" type="button" onClick={() => setSidebarCollapsed((current) => !current)} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
-          {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-          <span className="nav-label">{sidebarCollapsed ? "Expand" : "Collapse"}</span>
-        </button>
-        <button className="logout" onClick={onLogout} aria-label="Logout"><LogOut size={18} /> <span className="nav-label">Logout</span></button>
-=======
         <div className="sidebar-actions">
           <button
             className="collapse-toggle"
@@ -895,7 +865,6 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
           </button>
           <button className="logout" onClick={onLogout} title={sidebarCollapsed ? "Logout" : undefined} aria-label="Logout"><LogOut size={18} /> <span>Logout</span></button>
         </div>
->>>>>>> 4402920 (Updated Asset management app)
       </aside>
       <div className="workspace">
         <header>
@@ -1046,11 +1015,7 @@ function CompanyForm({ onCreate }) {
       const result = await uploadFile(file);
       update("logoUrl", result.url);
     } catch (error) {
-<<<<<<< HEAD
-      setUploadError(formatUploadError(error, "logo"));
-=======
       setUploadError(uploadErrorMessage(error));
->>>>>>> 4402920 (Updated Asset management app)
     } finally {
       setUploadingLogo(false);
       event.target.value = "";
@@ -1259,13 +1224,9 @@ function EngineerModal({ engineers, onClose, onCreate, onUpdateStatus }) {
         </div>
         <form className="form-grid engineer-form-grid" onSubmit={submit}>
           <input placeholder="Engineer name" value={form.name} onChange={(event) => update("name", event.target.value)} required />
-<<<<<<< HEAD
-          <input inputMode="numeric" placeholder="Phone number" value={form.phone} onChange={(event) => update("phone", event.target.value)} />
-=======
           <input type="email" placeholder="Engineer email" value={form.email} onChange={(event) => update("email", event.target.value)} />
           <input inputMode="numeric" placeholder="Phone" value={form.phone} onChange={(event) => update("phone", event.target.value)} maxLength={10} />
           <input placeholder="Specialization" value={form.specialization} onChange={(event) => update("specialization", event.target.value)} />
->>>>>>> 4402920 (Updated Asset management app)
           <select value={form.status} onChange={(event) => update("status", event.target.value)}>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
@@ -1403,11 +1364,7 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
       const result = await uploadFile(file);
       update("logoUrl", result.url);
     } catch (error) {
-<<<<<<< HEAD
-      setUploadError(formatUploadError(error, "logo"));
-=======
       setUploadError(uploadErrorMessage(error));
->>>>>>> 4402920 (Updated Asset management app)
     } finally {
       setUploadingLogo(false);
       event.target.value = "";
@@ -1782,26 +1739,15 @@ function AssetRow({ asset, client, selected, onSelect, onEdit }) {
   );
 }
 
-<<<<<<< HEAD
-function AssetForm({ clients, categories, existingAssets, onCreate }) {
-  const steps = ["Asset code", "Category", "Asset name", "User name"];
-=======
 function AssetForm({ clients, categories, existingAssets, onCreate, lockedClientId = "" }) {
   const steps = ["Assign", "Identify", "Lifecycle", "Media"];
->>>>>>> 4402920 (Updated Asset management app)
   const [step, setStep] = useState(0);
   const [maxUnlockedStep, setMaxUnlockedStep] = useState(0);
   const [form, setForm] = useState({
-<<<<<<< HEAD
-    clientId: clients[0]?.id || "",
-    assetCode: "",
-=======
     name: "",
     assetCode: "",
     clientId: lockedClientId || clients[0]?.id || "",
->>>>>>> 4402920 (Updated Asset management app)
     category: categories[0] || "",
-    name: "",
     userName: ""
   });
 
@@ -1830,13 +1776,6 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
     });
   }
 
-<<<<<<< HEAD
-  function canContinue() {
-    if (step === 0) return Boolean(form.assetCode);
-    if (step === 1) return Boolean(form.category);
-    if (step === 2) return Boolean(form.name.trim());
-    return Boolean(form.userName.trim());
-=======
   async function uploadAssetImage(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1867,7 +1806,6 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
       setUploadingDocument(false);
       event.target.value = "";
     }
->>>>>>> 4402920 (Updated Asset management app)
   }
 
   function submit(event) {
@@ -1933,13 +1871,6 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
 
       {step === 0 && (
         <div className="wizard-step">
-<<<<<<< HEAD
-          <h3>Asset code</h3>
-          <p>Generated automatically from the company and category selection.</p>
-          <label>
-            Asset code
-            <input value={form.assetCode} readOnly />
-=======
           <h3>Assign to company</h3>
           <p>Select the client company that owns or uses this asset.</p>
           {lockedClientId ? (
@@ -1958,7 +1889,6 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
           <label>
             Location
             <input placeholder="Office, department, site, or room" value={form.location} onChange={(event) => update("location", event.target.value)} />
->>>>>>> 4402920 (Updated Asset management app)
           </label>
         </div>
       )}
@@ -2028,11 +1958,7 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete, canDelete
       const result = await uploadFile(file);
       setForm((current) => ({ ...current, images: [result.url, ...(current.images || []).slice(1)] }));
     } catch (error) {
-<<<<<<< HEAD
-      setUploadError(formatUploadError(error, "image"));
-=======
       setUploadError(uploadErrorMessage(error));
->>>>>>> 4402920 (Updated Asset management app)
     } finally {
       setUploadingImage(false);
       event.target.value = "";
@@ -2067,12 +1993,6 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete, canDelete
       </div>
       <input placeholder="Asset code" value={form.assetCode} readOnly />
       <input placeholder="Asset name" value={form.name} onChange={(event) => update("name", event.target.value)} required />
-<<<<<<< HEAD
-      <input placeholder="User name" value={form.userName || ""} onChange={(event) => update("userName", event.target.value)} />
-      <select value={form.clientId} onChange={(event) => update("clientId", event.target.value)}>
-        {clients.map((client) => <option key={client.id} value={client.id}>{client.companyName}</option>)}
-      </select>
-=======
       {lockedClientId ? (
         <div className="review-box">
           <strong>{clients.find((client) => client.id === lockedClientId)?.companyName || "Your company"}</strong>
@@ -2083,7 +2003,6 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete, canDelete
           {clients.map((client) => <option key={client.id} value={client.id}>{client.companyName}</option>)}
         </select>
       )}
->>>>>>> 4402920 (Updated Asset management app)
       <select value={form.category} onChange={(event) => update("category", event.target.value)}>
         {categories.map((category) => <option key={category} value={category}>{category}</option>)}
       </select>
@@ -2123,11 +2042,7 @@ function AssetMediaPanel({ asset, onAddImage, onAddDocument, onRemoveImage, onRe
       const result = await uploadFile(file);
       onAddImage(result.url);
     } catch (error) {
-<<<<<<< HEAD
-      setUploadError(formatUploadError(error, "image"));
-=======
       setUploadError(uploadErrorMessage(error));
->>>>>>> 4402920 (Updated Asset management app)
     } finally {
       setUploadingImage(false);
       event.target.value = "";
@@ -2143,11 +2058,7 @@ function AssetMediaPanel({ asset, onAddImage, onAddDocument, onRemoveImage, onRe
       const result = await uploadFile(file);
       onAddDocument(result.url);
     } catch (error) {
-<<<<<<< HEAD
-      setUploadError(formatUploadError(error, "document"));
-=======
       setUploadError(uploadErrorMessage(error));
->>>>>>> 4402920 (Updated Asset management app)
     } finally {
       setUploadingDocument(false);
       event.target.value = "";
@@ -2243,25 +2154,16 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
   const [filterClientId, setFilterClientId] = useState(user.role === "admin" ? (data.clients[0]?.id || "") : user.clientId);
   const [filterCategory, setFilterCategory] = useState("");
   const [selectedId, setSelectedId] = useState(scopedAssets[0]?.id);
-<<<<<<< HEAD
-  const [editingId, setEditingId] = useState(null);
-  const [showAssetForm, setShowAssetForm] = useState(false);
-=======
   const [assetView, setAssetView] = useState("details");
->>>>>>> 4402920 (Updated Asset management app)
   const assetCategories = data.assetCategories || [];
   const editableClients = user.role === "admin" ? data.clients : data.clients.filter((client) => client.id === user.clientId);
   const selectedClient = editableClients.find((client) => client.id === filterClientId) || editableClients[0];
   const selectedCompanyCategories = clientCategories(selectedClient, assetCategories);
   const selected = scopedAssets.find((asset) => asset.id === selectedId) || scopedAssets.find((asset) => asset.clientId === selectedClient?.id);
   const filtered = scopedAssets.filter((asset) =>
-<<<<<<< HEAD
-    [asset.name, asset.assetCode, asset.category, asset.userName].join(" ").toLowerCase().includes(query.toLowerCase())
-=======
     (!filterClientId || asset.clientId === filterClientId) &&
     (!filterCategory || asset.category === filterCategory) &&
     [asset.name, asset.assetCode, asset.category, asset.serialNumber].join(" ").toLowerCase().includes(query.toLowerCase())
->>>>>>> 4402920 (Updated Asset management app)
   );
   const groupedAssets = user.role === "admin"
     ? data.clients
@@ -2300,28 +2202,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
       name: form.name,
       userName: form.userName,
       category: form.category,
-<<<<<<< HEAD
-      brand: "",
-      model: "",
-      serialNumber: "",
-      purchaseDate: "",
-      warrantyEndDate: "",
-      location: "",
-      status: "active",
-      notes: "",
-      images: [],
-      documents: [],
-      lifecycle: [{ id: uid("l"), type: "Created", description: "Asset created by admin.", createdAt: today() }]
-    };
-    if (duplicateAssetCodes([asset, ...data.assets]).length > 0) {
-      notify(`Asset code ${assetCode} already exists. Refresh the page or edit the conflicting asset first.`, "error");
-      return;
-    }
-    setData((current) => ({ ...current, assets: [asset, ...current.assets] }));
-    setSelectedId(asset.id);
-    setEditingId(null);
-    setShowAssetForm(false);
-=======
       brand: form.brand,
       model: form.model,
       serialNumber: form.serialNumber,
@@ -2349,7 +2229,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
     ));
     setSelectedId(asset.id);
     setAssetView("details");
->>>>>>> 4402920 (Updated Asset management app)
     notify(`Added ${asset.name}.`);
   }
 
@@ -2387,18 +2266,11 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
   }
 
   function updateAsset(form) {
-<<<<<<< HEAD
-    let blocked = false;
-    setData((current) => {
-      const nextAssetCode = generateAssetCode(current.clients, current.assets, form.clientId, form.category, form.id);
-      const nextAssets = current.assets.map((asset) => {
-=======
     setData((current) => {
       let updatedAsset = null;
       const nextState = {
         ...current,
         assets: current.assets.map((asset) => {
->>>>>>> 4402920 (Updated Asset management app)
         if (asset.id !== form.id) return asset;
         const lifecycle = [...asset.lifecycle];
         if (asset.clientId !== form.clientId) {
@@ -2408,22 +2280,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
         if (asset.status !== form.status) {
           lifecycle.push({ id: uid("l"), type: "Status", description: `Status changed to ${form.status.replace("_", " ")}.`, createdAt: today() });
         }
-<<<<<<< HEAD
-        lifecycle.push({ id: uid("l"), type: "Updated", description: "Asset details updated by admin.", createdAt: today() });
-        return { ...asset, ...form, assetCode: nextAssetCode, lifecycle };
-      });
-      if (duplicateAssetCodes(nextAssets).length > 0) {
-        blocked = true;
-        return current;
-      }
-      return { ...current, assets: nextAssets };
-    });
-    if (blocked) {
-      notify("This asset still conflicts with another asset code. Change the company or category, or remove the duplicate asset.", "error");
-      return;
-    }
-    setEditingId(null);
-=======
         lifecycle.push({ id: uid("l"), type: "Updated", description: `Asset details updated by ${user.role}.`, createdAt: today() });
         updatedAsset = { ...asset, ...form, clientId: user.role === "admin" ? form.clientId : asset.clientId, assetCode: nextAssetCode, lifecycle };
         return updatedAsset;
@@ -2441,7 +2297,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
       });
     });
     setAssetView("details");
->>>>>>> 4402920 (Updated Asset management app)
     notify(`Updated ${form.name}.`);
   }
 
@@ -2454,13 +2309,8 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
       const remainingAssets = current.assets.filter((asset) => asset.id !== assetId);
       const deletedAppealIds = current.appeals.filter((appeal) => appeal.assetId === assetId).map((appeal) => appeal.id);
       setSelectedId(remainingAssets[0]?.id);
-<<<<<<< HEAD
-      setEditingId((currentEditingId) => (currentEditingId === assetId ? null : currentEditingId));
-      return {
-=======
       const deletedAsset = current.assets.find((asset) => asset.id === assetId);
       return withNotification({
->>>>>>> 4402920 (Updated Asset management app)
         ...current,
         assets: remainingAssets,
         serviceRecords: current.serviceRecords.filter((record) => record.assetId !== assetId),
@@ -2478,10 +2328,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
         tone: "warning"
       });
     });
-<<<<<<< HEAD
-=======
     setAssetView("details");
->>>>>>> 4402920 (Updated Asset management app)
     notify("Asset deleted.");
   }
 
@@ -2514,20 +2361,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
   }
 
   function addDocument(assetId, documentName) {
-<<<<<<< HEAD
-    setData((current) => ({
-      ...current,
-      assets: current.assets.map((asset) =>
-        asset.id === assetId
-          ? {
-              ...asset,
-              documents: [...asset.documents, documentName],
-              lifecycle: [...asset.lifecycle, { id: uid("l"), type: "Document", description: `${documentLabel(documentName)} added.`, createdAt: today() }]
-            }
-          : asset
-      )
-    }));
-=======
     setData((current) => {
       const changedAsset = current.assets.find((asset) => asset.id === assetId);
       return withNotification({
@@ -2552,7 +2385,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
         entityId: assetId
       });
     });
->>>>>>> 4402920 (Updated Asset management app)
     notify("Asset document added.");
   }
 
@@ -2685,29 +2517,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
         </div>
       </div>
       <div className="asset-workspace">
-<<<<<<< HEAD
-        {showAssetForm && (
-          <div className="asset-subpage">
-            <div className="panel asset-subpage-intro">
-              <span className="eyebrow">New asset</span>
-              <h2>Create an asset</h2>
-              <p>Use the guided form to generate the asset code, select the category, and save the assigned user.</p>
-            </div>
-            {user.role === "admin" && <AssetCategoryManager categories={assetCategories} onCreateCategory={createCategory} />}
-            <AssetForm clients={creationClients.length > 0 ? creationClients : data.clients} categories={assetCategories} existingAssets={data.assets} onCreate={createAsset} />
-          </div>
-        )}
-        {selected ? (
-          <>
-            <div className="panel asset-detail">
-              <AssetVisual asset={selected} className="asset-hero-image" />
-              <div className="asset-detail-body">
-                <div className="asset-detail-head">
-                  <div>
-                    <span className={statusClass(selected.status)}>{formatStatusLabel(selected.status)}</span>
-                    <h2>{selected.name}</h2>
-                    <p>{selected.assetCode} / {selected.category || "Uncategorized"} / {selected.userName || "No user assigned"}</p>
-=======
         <div className="panel asset-subnav">
           <div>
             <span className="eyebrow">Asset workspace</span>
@@ -2758,33 +2567,9 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
                       <div><dt>Warranty ends</dt><dd>{selected.warrantyEndDate || "Not recorded"}</dd></div>
                       <div className="wide"><dt>Notes</dt><dd>{selected.notes || "No notes"}</dd></div>
                     </dl>
->>>>>>> 4402920 (Updated Asset management app)
                   </div>
-                  {user.role === "admin" && !editingId && (
-                    <label className="status-control">
-                      Status
-                      <select value={selected.status} onChange={(event) => updateStatus(selected.id, event.target.value)}>
-                        <option value="active">Active</option>
-                        <option value="in_service">In service</option>
-                        <option value="repairing">Repairing</option>
-                        <option value="repaired">Repaired</option>
-                        <option value="retired">Retired</option>
-                        <option value="damaged">Damaged</option>
-                      </select>
-                    </label>
-                  )}
                 </div>
-                <dl className="asset-facts">
-                  <div><dt>Client</dt><dd>{data.clients.find((client) => client.id === selected.clientId)?.companyName || "Not assigned"}</dd></div>
-                  <div><dt>User name</dt><dd>{selected.userName || "Not recorded"}</dd></div>
-                  <div><dt>Brand / model</dt><dd>{selected.brand || "Not recorded"} / {selected.model || "Not recorded"}</dd></div>
-                  <div><dt>Location</dt><dd>{selected.location || "Not recorded"}</dd></div>
-                  <div><dt>Warranty ends</dt><dd>{selected.warrantyEndDate || "Not recorded"}</dd></div>
-                  <div className="wide"><dt>Notes</dt><dd>{selected.notes || "No notes"}</dd></div>
-                </dl>
-              </div>
-            </div>
-            {user.role === "admin" ? (
+                {user.role === "admin" && (
               <>
                 {editingId === selected.id ? (
                   <>
@@ -2811,13 +2596,8 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
                   </>
                 )}
               </>
-<<<<<<< HEAD
-            ) : (
-              <>
-                <AssetMediaPanel asset={selected} readOnly />
-                <HistoryPanel title="Lifecycle" items={selected.lifecycle} />
+            )}
               </>
-=======
             )}
             {assetView === "add" && (
               <div className="asset-subpage">
@@ -2856,7 +2636,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
                   <p>Choose an asset from the list to open its edit page.</p>
                 </div>
               )
->>>>>>> 4402920 (Updated Asset management app)
             )}
           </>
         ) : !showAssetForm ? (
@@ -2964,11 +2743,7 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
         attachments = [await uploadFile(newIssueFile)];
       }
     } catch (error) {
-<<<<<<< HEAD
-      setUploadError(formatUploadError(error, "attachment"));
-=======
       setUploadError(uploadErrorMessage(error));
->>>>>>> 4402920 (Updated Asset management app)
       setUploadingAppeal(false);
       return;
     }
@@ -3022,21 +2797,6 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
 
   function updateSelectedAppeal(updater, message) {
     if (!selected) return;
-<<<<<<< HEAD
-    const nextValue = typeof updater === "function" ? updater(selected) : updater;
-    if (assignmentLocked && Object.prototype.hasOwnProperty.call(nextValue || {}, "assignedEngineerId")) {
-      notify("Engineer assignment is locked after resolution.", "error");
-      return;
-    }
-    setData((current) => ({
-      ...current,
-      appeals: current.appeals.map((appeal) =>
-        appeal.id === selected.id
-          ? { ...appeal, ...nextValue, updatedAt: new Date().toISOString() }
-          : appeal
-      )
-    }));
-=======
     setData((current) => {
       const target = current.appeals.find((appeal) => appeal.id === selected.id);
       const patch = typeof updater === "function" ? updater(target) : updater;
@@ -3058,7 +2818,6 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
         entityId: selected.id
       });
     });
->>>>>>> 4402920 (Updated Asset management app)
     if (message) notify(message);
   }
 
@@ -3815,11 +3574,7 @@ export default function App() {
         })
         .catch((error) => {
           if (cancelled) return;
-<<<<<<< HEAD
-          setApiStatus(isConflictError(error) ? "conflict" : "offline");
-=======
           setApiStatus(error?.isApiError ? "connected" : "offline");
->>>>>>> 4402920 (Updated Asset management app)
           setPendingSync(true);
           if (isConflictError(error)) {
             notify(error.message || "Sync conflict. Resolve duplicate records and save again.", "error");
@@ -3972,11 +3727,7 @@ export default function App() {
       setApiStatus("connected");
       return true;
     } catch (error) {
-<<<<<<< HEAD
-      setApiStatus(isConflictError(error) ? "conflict" : "offline");
-=======
       setApiStatus(error?.isApiError ? "connected" : "offline");
->>>>>>> 4402920 (Updated Asset management app)
       setPendingSync(true);
       if (isConflictError(error)) {
         notify(error.message || "Sync conflict. Resolve duplicate records and save again.", "error");
@@ -4007,14 +3758,7 @@ export default function App() {
     } catch (error) {
       queuePendingState(nextState);
       setPendingSync(true);
-<<<<<<< HEAD
-      setApiStatus(isConflictError(error) ? "conflict" : "offline");
-      if (isConflictError(error)) {
-        notify(error.message || "Sync conflict. Resolve duplicate records and save again.", "error");
-      }
-=======
       setApiStatus(error?.isApiError ? "connected" : "offline");
->>>>>>> 4402920 (Updated Asset management app)
     }
   }
 
@@ -4414,13 +4158,6 @@ export default function App() {
       view={view}
       setView={setView}
       notice={notice}
-<<<<<<< HEAD
-      headerAction={user.role === "admin" && view === "assets" ? (
-        <button className="secondary" type="button" onClick={() => setShowEngineerModal(true)}>
-          <Plus size={16} /> Add engineer
-        </button>
-      ) : null}
-=======
       apiStatus={apiStatus}
       theme={theme}
       onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
@@ -4429,7 +4166,6 @@ export default function App() {
       onMarkNotificationsRead={markNotificationsRead}
       onClearNotifications={clearNotifications}
       headerAction={null}
->>>>>>> 4402920 (Updated Asset management app)
       onLogout={() => {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
@@ -4440,17 +4176,8 @@ export default function App() {
     >
       {(apiStatus === "offline" || apiStatus === "conflict") && (
         <div className="api-banner">
-<<<<<<< HEAD
-          {apiStatus === "conflict"
-            ? "Sync blocked: duplicate or conflicting data was detected. Fix the conflicting record and save again."
-            : pendingSync
-              ? "Offline mode: changes are queued and will sync when the API is available."
-              : "Backend is offline. You can keep viewing cached data."}
-          {pendingSync && apiStatus !== "conflict" && <button type="button" onClick={syncPendingState}>Retry sync</button>}
-=======
           {pendingSync ? "Connection issue: changes are queued and will sync when service is available." : "Something went wrong. You can keep viewing cached data."}
           {pendingSync && <button type="button" onClick={syncPendingState}>Retry sync</button>}
->>>>>>> 4402920 (Updated Asset management app)
         </div>
       )}
       {view === "dashboard" && <Dashboard user={user} data={data} scopedAssets={scopedAssets} scopedAppeals={scopedAppeals} clientBrand={clientBrand} setData={setData} />}

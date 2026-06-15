@@ -976,30 +976,6 @@ nav button,
   font-weight: 800;
 }
 
-<<<<<<< HEAD
-.sidebar-toggle {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-  border: 0;
-  border-radius: 8px;
-  padding: 11px 12px;
-  color: #cbd5e1;
-  background: rgba(255, 255, 255, 0.06);
-  text-align: left;
-  font-weight: 800;
-}
-
-.sidebar-collapsed nav button,
-.sidebar-collapsed .logout,
-.sidebar-collapsed .sidebar-toggle {
-  justify-content: center;
-}
-
-.sidebar-collapsed nav button {
-  padding-inline: 10px;
-=======
 nav button::before,
 .logout::before,
 .collapse-toggle::before,
@@ -1020,7 +996,6 @@ nav button > *,
 .theme-toggle > * {
   position: relative;
   z-index: 1;
->>>>>>> 4402920 (Updated Asset management app)
 }
 
 nav button.active,
@@ -1604,29 +1579,6 @@ small {
   gap: 10px;
 }
 
-<<<<<<< HEAD
-.asset-client-group {
-  display: grid;
-  gap: 10px;
-}
-
-.asset-client-group-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 2px 0;
-}
-
-.asset-client-group-head strong {
-  display: block;
-  color: var(--haak-ink);
-}
-
-.asset-client-group-head small {
-  display: block;
-  margin-top: 4px;
-=======
 .asset-list,
 .appeal-list,
 .company-list,
@@ -1699,7 +1651,6 @@ small {
 
 .messages {
   max-height: min(420px, 54vh);
->>>>>>> 4402920 (Updated Asset management app)
 }
 
 .appeals-layout {
