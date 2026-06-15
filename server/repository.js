@@ -31,9 +31,27 @@ export async function ensureNormalizedSchema() {
       phone TEXT NOT NULL DEFAULT '',
       address TEXT NOT NULL DEFAULT '',
       logo_url TEXT NOT NULL DEFAULT '',
+      asset_categories JSONB NOT NULL DEFAULT '[]'::jsonb,
+      amc_start_date DATE,
+      amc_end_date DATE,
+      amc_term TEXT NOT NULL DEFAULT '',
+      amc_renewal_notice_sent_at TIMESTAMPTZ,
       status TEXT NOT NULL DEFAULT 'active',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS asset_categories JSONB NOT NULL DEFAULT '[]'::jsonb");
+  await query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS amc_start_date DATE");
+  await query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS amc_end_date DATE");
+  await query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS amc_term TEXT NOT NULL DEFAULT ''");
+  await query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS amc_renewal_notice_sent_at TIMESTAMPTZ");
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value JSONB NOT NULL
     )
   `);
 
@@ -45,11 +63,14 @@ export async function ensureNormalizedSchema() {
       role TEXT NOT NULL CHECK (role IN ('admin', 'client')),
       client_id TEXT REFERENCES companies(id) ON DELETE SET NULL,
       password_hash TEXT NOT NULL,
+      password_changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (email, role)
     )
   `);
+
+  await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()");
 
   await query(`
     CREATE TABLE IF NOT EXISTS assets (
@@ -182,6 +203,24 @@ export async function ensureNormalizedSchema() {
   `);
 
   await query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL DEFAULT 'activity',
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      client_id TEXT REFERENCES companies(id) ON DELETE SET NULL,
+      company_name TEXT NOT NULL DEFAULT '',
+      actor_role TEXT NOT NULL DEFAULT '',
+      actor_name TEXT NOT NULL DEFAULT '',
+      entity_type TEXT NOT NULL DEFAULT '',
+      entity_id TEXT NOT NULL DEFAULT '',
+      tone TEXT NOT NULL DEFAULT 'info',
+      read_by JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL
+    )
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS uploaded_files (
       id TEXT PRIMARY KEY,
       uploaded_by TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -217,9 +256,10 @@ export async function seedNormalizedState(state) {
 }
 
 export async function readState() {
-  const [users, companies, assets, assetCategories, images, documents, lifecycle, serviceRecords, engineers, appeals, appealMessages, credentialRequests] = await Promise.all([
+  const [users, companies, settings, assets, assetCategories, images, documents, lifecycle, serviceRecords, engineers, appeals, appealMessages, credentialRequests, notifications] = await Promise.all([
     query("SELECT * FROM users ORDER BY created_at, id"),
     query("SELECT * FROM companies ORDER BY created_at, id"),
+    query("SELECT key, value FROM app_settings"),
     query("SELECT * FROM assets ORDER BY created_at, id"),
     query("SELECT * FROM asset_categories ORDER BY name, id"),
     query("SELECT * FROM asset_images ORDER BY sort_order, id"),
@@ -229,12 +269,17 @@ export async function readState() {
     query("SELECT * FROM engineers ORDER BY created_at, id"),
     query("SELECT * FROM appeals ORDER BY updated_at DESC"),
     query("SELECT * FROM appeal_messages ORDER BY created_at, id"),
-    query("SELECT * FROM credential_requests ORDER BY created_at DESC")
+    query("SELECT * FROM credential_requests ORDER BY created_at DESC"),
+    query("SELECT * FROM notifications ORDER BY created_at DESC")
   ]);
 
   const derivedCategories = [...new Set(assets.rows.map((asset) => asset.category).filter(Boolean))].sort((first, second) => first.localeCompare(second));
 
   return {
+    settings: {
+      adminAlertEmail: "huzefarampurawala9@gmail.com",
+      ...Object.fromEntries(settings.rows.map((setting) => [setting.key, setting.value]))
+    },
     assetCategories: assetCategories.rows.length > 0 ? assetCategories.rows.map((category) => category.name) : derivedCategories,
     engineers: engineers.rows.map((engineer) => ({
       id: engineer.id,
@@ -250,7 +295,8 @@ export async function readState() {
       email: user.email,
       role: user.role,
       clientId: user.client_id,
-      passwordHash: user.password_hash
+      passwordHash: user.password_hash,
+      passwordChangedAt: timestampValue(user.password_changed_at)
     })),
     clients: companies.rows.map((company) => ({
       id: company.id,
@@ -260,6 +306,11 @@ export async function readState() {
       phone: company.phone,
       address: company.address,
       logoUrl: company.logo_url,
+      assetCategories: Array.isArray(company.asset_categories) && company.asset_categories.length > 0 ? company.asset_categories : derivedCategories,
+      amcStartDate: dateValue(company.amc_start_date) || "",
+      amcEndDate: dateValue(company.amc_end_date) || "",
+      amcTerm: company.amc_term || "",
+      amcRenewalNoticeSentAt: company.amc_renewal_notice_sent_at ? timestampValue(company.amc_renewal_notice_sent_at) : "",
       status: company.status
     })),
     assets: assets.rows.map((asset) => ({
@@ -324,6 +375,21 @@ export async function readState() {
       status: request.status,
       createdAt: timestampValue(request.created_at),
       resolvedAt: request.resolved_at ? timestampValue(request.resolved_at) : null
+    })),
+    notifications: notifications.rows.map((notification) => ({
+      id: notification.id,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      clientId: notification.client_id,
+      companyName: notification.company_name,
+      actorRole: notification.actor_role,
+      actorName: notification.actor_name,
+      entityType: notification.entity_type,
+      entityId: notification.entity_id,
+      tone: notification.tone,
+      readBy: notification.read_by || [],
+      createdAt: timestampValue(notification.created_at)
     }))
   };
 }
@@ -338,6 +404,7 @@ async function writeStateOnce(state) {
     await client.query(`
       LOCK TABLE
         uploaded_files,
+        notifications,
         appeal_messages,
         appeals,
         engineers,
@@ -355,6 +422,7 @@ async function writeStateOnce(state) {
     // Keep uploaded_files metadata intact; DELETE honors ON DELETE SET NULL for file ownership.
     await client.query("DELETE FROM appeal_messages");
     await client.query("DELETE FROM appeals");
+    await client.query("DELETE FROM notifications");
     await client.query("DELETE FROM credential_requests");
     await client.query("DELETE FROM engineers");
     await client.query("DELETE FROM service_records");
@@ -366,20 +434,44 @@ async function writeStateOnce(state) {
     await client.query("DELETE FROM users");
     await client.query("DELETE FROM companies");
 
+    await client.query("DELETE FROM app_settings");
+    for (const [key, value] of Object.entries(state.settings || {})) {
+      await client.query(
+        `INSERT INTO app_settings (key, value)
+         VALUES ($1, $2::jsonb)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        [key, JSON.stringify(value)]
+      );
+    }
+
     for (const company of state.clients || []) {
       await client.query(
-        `INSERT INTO companies (id, company_name, contact_person, email, phone, address, logo_url, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [company.id, company.companyName, company.contactPerson || "", company.email || "", company.phone || "", company.address || "", company.logoUrl || "", company.status || "active"]
+        `INSERT INTO companies (id, company_name, contact_person, email, phone, address, logo_url, asset_categories, amc_start_date, amc_end_date, amc_term, amc_renewal_notice_sent_at, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13)`,
+        [
+          company.id,
+          company.companyName,
+          company.contactPerson || "",
+          company.email || "",
+          company.phone || "",
+          company.address || "",
+          company.logoUrl || "",
+          JSON.stringify(company.assetCategories || []),
+          company.amcStartDate || null,
+          company.amcEndDate || null,
+          company.amcTerm || "",
+          company.amcRenewalNoticeSentAt || null,
+          company.status || "active"
+        ]
       );
     }
 
     for (const user of state.users || []) {
       if (!user.passwordHash) throw new Error(`Missing password hash for user ${user.id}.`);
       await client.query(
-        `INSERT INTO users (id, name, email, role, client_id, password_hash)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [user.id, user.name, user.email, user.role, user.clientId || null, user.passwordHash]
+        `INSERT INTO users (id, name, email, role, client_id, password_hash, password_changed_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [user.id, user.name, user.email, user.role, user.clientId || null, user.passwordHash, timestampValue(user.passwordChangedAt)]
       );
     }
 
@@ -501,6 +593,29 @@ async function writeStateOnce(state) {
           request.status || "pending",
           request.createdAt || new Date().toISOString(),
           request.resolvedAt || null
+        ]
+      );
+    }
+
+    const validNotificationClientIds = new Set((state.clients || []).map((company) => company.id));
+    for (const notification of state.notifications || []) {
+      await client.query(
+        `INSERT INTO notifications (id, type, title, message, client_id, company_name, actor_role, actor_name, entity_type, entity_id, tone, read_by, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13)`,
+        [
+          notification.id,
+          notification.type || "activity",
+          notification.title || "Notification",
+          notification.message || "",
+          notification.clientId && validNotificationClientIds.has(notification.clientId) ? notification.clientId : null,
+          notification.companyName || "",
+          notification.actorRole || "",
+          notification.actorName || "",
+          notification.entityType || "",
+          notification.entityId || "",
+          notification.tone || "info",
+          JSON.stringify(notification.readBy || []),
+          notification.createdAt || new Date().toISOString()
         ]
       );
     }

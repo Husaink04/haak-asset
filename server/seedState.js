@@ -2,6 +2,7 @@ export const seedState = {
   assetCategories: ["Laptop", "Printer"],
   credentialRequests: [],
   engineers: [],
+  notifications: [],
   users: [
     { id: "u-admin", name: "HAAK Admin", email: "admin@haakinfotech.com", password: "admin123", role: "admin" },
     { id: "u-client", name: "Client Manager", email: "client@example.com", password: "client123", role: "client", clientId: "c-1" }

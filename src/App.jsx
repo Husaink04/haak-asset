@@ -1,9 +1,12 @@
 import {
   AlertCircle,
   Archive,
+  Bell,
   Building2,
   Camera,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   ChevronLeft,
   ChevronRight,
@@ -15,27 +18,54 @@ import {
   LogOut,
   Mail,
   MessageSquare,
+  Moon,
   Paperclip,
   Plus,
   Save,
   Search,
   ShieldCheck,
   Smartphone,
+  Sun,
   Trash2,
-  UserRound
+  UserRound,
+  Wifi,
+  WifiOff
 } from "lucide-react";
 import React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Toaster, toast } from "sonner";
 
 const STORE_KEY = "haak-asset-management-state-v1";
 const TOKEN_KEY = "haak-asset-management-token-v1";
 const USER_KEY = "haak-asset-management-user-v1";
 const VIEW_KEY = "haak-asset-management-view-v1";
 const PENDING_STATE_KEY = "haak-asset-management-pending-state-v1";
+<<<<<<< HEAD
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:4000/api";
 const DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_UPLOAD_BYTES = Number(import.meta.env.VITE_MAX_UPLOAD_BYTES || DEFAULT_MAX_UPLOAD_BYTES);
 const MAX_UPLOAD_MB = Math.max(1, Math.round(MAX_UPLOAD_BYTES / (1024 * 1024)));
+=======
+const THEME_KEY = "haak-asset-management-theme-v1";
+const API_URL = import.meta.env.VITE_API_URL || "/api";
+const MAX_UPLOAD_MB = 10;
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+const PASSWORD_ROTATION_DAYS = 90;
+const FRIENDLY_ERROR_MESSAGE = "Something went wrong. Please try again.";
+const DEFAULT_ADMIN_ALERT_EMAIL = "huzefarampurawala9@gmail.com";
+const AMC_TERMS = [
+  { label: "6M", months: 6 },
+  { label: "1Y", months: 12 },
+  { label: "2Y", months: 24 },
+  { label: "3Y", months: 36 }
+];
+const SERVICE_DUE_TERMS = [
+  { label: "1M", months: 1 },
+  { label: "3M", months: 3 },
+  { label: "6M", months: 6 },
+  { label: "1Y", months: 12 }
+];
+>>>>>>> 4402920 (Updated Asset management app)
 const IMAGE_UPLOAD_TYPES = new Set(["image/jpeg", "image/png"]);
 const DOCUMENT_UPLOAD_TYPES = new Set([
   "application/pdf",
@@ -43,9 +73,13 @@ const DOCUMENT_UPLOAD_TYPES = new Set([
 ]);
 
 const seedState = {
+  settings: {
+    adminAlertEmail: DEFAULT_ADMIN_ALERT_EMAIL
+  },
   assetCategories: ["Laptop", "Printer"],
   credentialRequests: [],
   engineers: [],
+  notifications: [],
   users: [
     { id: "u-admin", name: "HAAK Admin", email: "admin@haakinfotech.com", password: "admin123", role: "admin" },
     { id: "u-client", name: "Client Manager", email: "client@example.com", password: "client123", role: "client", clientId: "c-1" }
@@ -59,6 +93,11 @@ const seedState = {
       phone: "+91 98765 43210",
       address: "Coimbatore, Tamil Nadu",
       logoUrl: "",
+      assetCategories: ["Laptop", "Printer"],
+      amcStartDate: "2026-06-01",
+      amcEndDate: "2027-06-01",
+      amcTerm: "1Y",
+      amcRenewalNoticeSentAt: "",
       status: "active"
     }
   ],
@@ -171,12 +210,26 @@ function loadState() {
   try {
     const parsed = JSON.parse(saved);
     const derivedCategories = [...new Set((parsed.assets || []).map((asset) => asset.category).filter(Boolean))];
+    const fallbackCategories = parsed.assetCategories?.length ? parsed.assetCategories : (derivedCategories.length ? derivedCategories : seedState.assetCategories);
     return {
       ...seedState,
       ...parsed,
-      assetCategories: parsed.assetCategories?.length ? parsed.assetCategories : (derivedCategories.length ? derivedCategories : seedState.assetCategories),
+      settings: {
+        ...seedState.settings,
+        ...(parsed.settings || {})
+      },
+      assetCategories: fallbackCategories,
+      clients: (parsed.clients || seedState.clients).map((client) => ({
+        ...client,
+        assetCategories: client.assetCategories?.length ? client.assetCategories : fallbackCategories,
+        amcStartDate: client.amcStartDate || "",
+        amcEndDate: client.amcEndDate || "",
+        amcTerm: client.amcTerm || "",
+        amcRenewalNoticeSentAt: client.amcRenewalNoticeSentAt || ""
+      })),
       credentialRequests: parsed.credentialRequests || [],
-      engineers: parsed.engineers || []
+      engineers: parsed.engineers || [],
+      notifications: parsed.notifications || []
     };
   } catch {
     return seedState;
@@ -217,6 +270,10 @@ function saveStoredView(nextView) {
   localStorage.setItem(VIEW_KEY, nextView);
 }
 
+function loadStoredTheme() {
+  return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
+}
+
 function loadPendingState() {
   const saved = localStorage.getItem(PENDING_STATE_KEY);
   if (!saved) return null;
@@ -243,23 +300,48 @@ function isConflictError(error) {
 async function apiRequest(path, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
   const isFormData = options.body instanceof FormData;
-  const response = await fetch(`${API_URL}${path}`, {
-    headers: {
-      ...(isFormData ? {} : { "Content-Type": "application/json" }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {})
-    },
-    ...options
-  });
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      headers: {
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {})
+      },
+      ...options
+    });
+  } catch (error) {
+    const friendlyError = new Error(FRIENDLY_ERROR_MESSAGE);
+    friendlyError.isNetworkError = true;
+    friendlyError.cause = error;
+    throw friendlyError;
+  }
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(body.error || "API request failed.");
     error.status = response.status;
+    error.detail = body.detail;
     error.isApiError = true;
     throw error;
   }
   return body;
+}
+
+function friendlyErrorMessage(error, fallback = FRIENDLY_ERROR_MESSAGE) {
+  if (error?.isNetworkError || error?.isApiError) return fallback;
+  return error?.message || fallback;
+}
+
+function uploadErrorMessage(error) {
+  if (error?.message?.startsWith("File must be") || error?.message?.startsWith("Images must be") || error?.message?.startsWith("Unsupported")) {
+    return error.message;
+  }
+  return "Something went wrong while uploading. Please try again.";
+}
+
+async function checkApiHealth() {
+  await apiRequest("/health");
 }
 
 function validateUploadFile(file) {
@@ -279,6 +361,9 @@ function validateUploadFile(file) {
 }
 
 async function uploadFile(file) {
+  if (!localStorage.getItem(TOKEN_KEY)) {
+    throw new Error("Sign in again before uploading.");
+  }
   validateUploadFile(file);
   const formData = new FormData();
   formData.append("file", file);
@@ -294,6 +379,42 @@ async function uploadFile(file) {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function addMonths(dateString, months) {
+  const base = dateString ? new Date(`${dateString}T00:00:00`) : new Date();
+  if (Number.isNaN(base.getTime())) return "";
+  base.setMonth(base.getMonth() + months);
+  return base.toISOString().slice(0, 10);
+}
+
+function monthsForTerm(term, options = AMC_TERMS) {
+  return options.find((item) => item.label === term)?.months || options[0]?.months || 1;
+}
+
+function clientCategories(client, fallbackCategories = []) {
+  return client?.assetCategories?.length ? client.assetCategories : fallbackCategories;
+}
+
+function isPriorityAsset(asset) {
+  return ["in_service", "repairing", "damaged"].includes(asset.status);
+}
+
+function isPriorityServiceRecord(record) {
+  return ["repairing", "pending", "in_service"].includes(record.status);
+}
+
+function isPriorityAppeal(appeal) {
+  return ["critical", "high"].includes(appeal.priority) || ["open", "in_review", "awaiting_client"].includes(appeal.status);
+}
+
+function isWithinAmcEditWindow(client) {
+  if (!client?.amcEndDate) return true;
+  const endDate = new Date(`${client.amcEndDate}T00:00:00`);
+  if (Number.isNaN(endDate.getTime())) return true;
+  const todayDate = new Date(`${today()}T00:00:00`);
+  const daysLeft = Math.ceil((endDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+  return daysLeft >= 0 && daysLeft <= 10;
 }
 
 function formatTimestamp(value) {
@@ -368,11 +489,50 @@ function formatLifecycleDescription(item) {
 }
 
 function normalizePhone(value) {
-  return String(value || "").replace(/\D+/g, "");
+  return String(value || "").replace(/\D+/g, "").slice(0, 10);
 }
 
 function isValidEmail(value) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+  return /^[^\s@]+@[^\s@]+$/.test(String(value || "").trim());
+}
+
+function passwordPolicyWarnings(password) {
+  if (!password) return [];
+  const warnings = [];
+  if (!/[A-Z]/.test(password)) warnings.push("uppercase letter");
+  if (!/[a-z]/.test(password)) warnings.push("lowercase letter");
+  if (!/\d/.test(password)) warnings.push("number");
+  if (!/[^A-Za-z0-9]/.test(password)) warnings.push("special character");
+  return warnings;
+}
+
+function passwordAgeDays(user) {
+  if (!user?.passwordChangedAt) return null;
+  const changedAt = new Date(user.passwordChangedAt);
+  if (Number.isNaN(changedAt.getTime())) return null;
+  return Math.floor((Date.now() - changedAt.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function PasswordPolicyHint({ password }) {
+  const warnings = passwordPolicyWarnings(password);
+  return (
+    <div className="password-policy-hint">
+      <strong>Password guidance</strong>
+      <span>Use at least 8 characters. Uppercase, lowercase, numbers, and special characters are recommended.</span>
+      {warnings.length > 0 && <small>Missing recommended: {warnings.join(", ")}.</small>}
+      <small>Passwords should be changed every {PASSWORD_ROTATION_DAYS} days.</small>
+    </div>
+  );
+}
+
+function PasswordRotationNotice({ user }) {
+  const age = passwordAgeDays(user);
+  if (age === null || age < PASSWORD_ROTATION_DAYS) return null;
+  return (
+    <div className="password-rotation-notice">
+      Your password is {age} days old. Please change it as part of the 90-day password policy.
+    </div>
+  );
 }
 
 function codeToken(value, fallback = "GEN") {
@@ -416,6 +576,44 @@ function duplicateAssetCodes(assets) {
 
 function uid(prefix) {
   return `${prefix}-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
+}
+
+function createNotification(state, details) {
+  const client = details.clientId ? state.clients.find((item) => item.id === details.clientId) : null;
+  return {
+    id: uid("note"),
+    type: details.type || "activity",
+    title: details.title,
+    message: details.message,
+    clientId: details.clientId || null,
+    companyName: client?.companyName || details.companyName || "",
+    actorRole: details.actorRole || "",
+    actorName: details.actorName || "",
+    entityType: details.entityType || "",
+    entityId: details.entityId || "",
+    tone: details.tone || "info",
+    createdAt: new Date().toISOString(),
+    readBy: []
+  };
+}
+
+function withNotification(state, details) {
+  const notification = createNotification(state, details);
+  return {
+    ...state,
+    notifications: [notification, ...(state.notifications || [])].slice(0, 500)
+  };
+}
+
+function scopedNotifications(notifications, user) {
+  const items = notifications || [];
+  if (user.role === "admin") return items;
+  return items.filter((item) => item.clientId === user.clientId);
+}
+
+function unreadNotificationCount(notifications, user) {
+  if (!user) return 0;
+  return scopedNotifications(notifications, user).filter((notification) => !(notification.readBy || []).includes(user.id)).length;
 }
 
 function statusClass(status) {
@@ -546,8 +744,75 @@ function LoginScreen({ onLogin }) {
   );
 }
 
+<<<<<<< HEAD
 function Shell({ user, children, view, setView, onLogout, headerAction, notice, clientBrand }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("haak-sidebar-collapsed") === "1");
+=======
+function AdminIdentityBadge({ apiStatus }) {
+  const isOnline = apiStatus === "connected";
+  return (
+    <div className={`admin-identity-chip ${isOnline ? "online" : "offline"}`} title={isOnline ? "System online" : "Connection issue"}>
+      {isOnline ? <Wifi size={17} /> : <WifiOff size={17} />}
+      <span>
+        <strong>ADMIN HAAK IT SOLUTIONS</strong>
+        <small>{isOnline ? "Online" : "Offline"}</small>
+      </span>
+    </div>
+  );
+}
+
+function NotificationCenter({ user, notifications, unreadCount, onMarkRead, onClear }) {
+  return (
+    <div className="notification-center">
+      <div className="notification-center-head">
+        <div>
+          <span className="eyebrow">{user.role === "admin" ? "All company activity" : "Company activity"}</span>
+          <h2>Notifications</h2>
+        </div>
+        <span className={unreadCount > 0 ? "badge open" : "badge active"}>{unreadCount} unread</span>
+      </div>
+      <div className="notification-actions">
+        <button className="secondary" type="button" onClick={onMarkRead} disabled={notifications.length === 0 || unreadCount === 0}>Mark all read</button>
+        <button className="danger compact-danger" type="button" onClick={onClear} disabled={notifications.length === 0}>Clear notifications</button>
+      </div>
+      <div className="notification-list notification-center-list">
+        {notifications.length > 0 ? notifications.map((notification) => {
+          const isUnread = !(notification.readBy || []).includes(user.id);
+          return (
+            <article key={notification.id} className={`notification-card ${notification.tone || "info"} ${isUnread ? "unread" : "read"}`}>
+              <div className="notification-icon"><Bell size={17} /></div>
+              <div>
+                <div className="notification-card-head">
+                  <strong>{notification.title}</strong>
+                  <small>{formatTimestamp(notification.createdAt)}</small>
+                </div>
+                <p>{notification.message}</p>
+                <div className="notification-meta">
+                  {isUnread && <span>Unread</span>}
+                  {notification.companyName && <span>{notification.companyName}</span>}
+                  {notification.actorRole && <span>{notification.actorRole}</span>}
+                  {notification.entityType && <span>{notification.entityType}</span>}
+                </div>
+              </div>
+            </article>
+          );
+        }) : (
+          <div className="empty-state compact-empty-state">
+            <Bell size={28} />
+            <h2>No notifications</h2>
+            <p>Alerts and activity updates will appear here.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Shell({ user, children, view, setView, onLogout, headerAction, notice, clientBrand, apiStatus = "offline", theme = "light", onToggleTheme, notifications = [], unreadCount = 0, onMarkNotificationsRead, onClearNotifications }) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const isDarkTheme = theme === "dark";
+>>>>>>> 4402920 (Updated Asset management app)
   const nav = user.role === "admin"
     ? [
         ["dashboard", "Dashboard", Archive],
@@ -570,7 +835,13 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
   }, [sidebarCollapsed]);
 
   return (
+<<<<<<< HEAD
     <div className={`app-shell ${user.role}-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+=======
+    <>
+      <Toaster richColors closeButton position="top-right" />
+      <div className={`app-shell ${user.role}-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+>>>>>>> 4402920 (Updated Asset management app)
       <aside>
         <div className="logo">
           <img src="/haak-logo-transparent.png" alt="HAAK INFOTECH" />
@@ -578,16 +849,53 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
         </div>
         <nav>
           {nav.map(([id, label, Icon]) => (
+<<<<<<< HEAD
             <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)} aria-label={label}>
               <Icon size={18} /> <span className="nav-label">{label}</span>
+=======
+            <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)} title={sidebarCollapsed ? label : undefined} aria-label={label}>
+              <Icon size={18} /> <span>{label}</span>
+>>>>>>> 4402920 (Updated Asset management app)
             </button>
           ))}
+          <button className={showNotifications ? "active" : ""} type="button" onClick={() => setShowNotifications((current) => !current)} title={sidebarCollapsed ? "Notifications" : undefined} aria-label="Notifications">
+            <Bell size={18} />
+            <span>Notifications</span>
+            {unreadCount > 0 && <small className="sidebar-count">{unreadCount}</small>}
+          </button>
         </nav>
+<<<<<<< HEAD
         <button className="sidebar-toggle" type="button" onClick={() => setSidebarCollapsed((current) => !current)} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
           {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           <span className="nav-label">{sidebarCollapsed ? "Expand" : "Collapse"}</span>
         </button>
         <button className="logout" onClick={onLogout} aria-label="Logout"><LogOut size={18} /> <span className="nav-label">Logout</span></button>
+=======
+        <div className="sidebar-actions">
+          <button
+            className="collapse-toggle"
+            type="button"
+            onClick={() => setSidebarCollapsed((current) => !current)}
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!sidebarCollapsed}
+          >
+            {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            <span>{sidebarCollapsed ? "Expand" : "Collapse"}</span>
+          </button>
+          <button
+            className="theme-toggle"
+            type="button"
+            onClick={onToggleTheme}
+            aria-label={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
+            title={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
+            aria-pressed={isDarkTheme}
+          >
+            {isDarkTheme ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+          <button className="logout" onClick={onLogout} title={sidebarCollapsed ? "Logout" : undefined} aria-label="Logout"><LogOut size={18} /> <span>Logout</span></button>
+        </div>
+>>>>>>> 4402920 (Updated Asset management app)
       </aside>
       <div className="workspace">
         <header>
@@ -596,6 +904,22 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
             <h1>{view === "dashboard" ? "Dashboard" : view[0].toUpperCase() + view.slice(1)}</h1>
           </div>
           <div className="header-actions">
+            <div className="notification-shell">
+              <button className="notification-bell-button" type="button" onClick={() => setShowNotifications((current) => !current)} aria-label="Open notifications">
+                <Bell size={18} />
+                {unreadCount > 0 && <span>{unreadCount}</span>}
+              </button>
+              {showNotifications && (
+                <NotificationCenter
+                  user={user}
+                  notifications={notifications}
+                  unreadCount={unreadCount}
+                  onMarkRead={onMarkNotificationsRead}
+                  onClear={onClearNotifications}
+                />
+              )}
+            </div>
+            {user.role === "admin" ? <AdminIdentityBadge apiStatus={apiStatus} /> : null}
             {clientBrand ? (
               <div className="client-brand-chip">
                 <CompanyLogo client={clientBrand} />
@@ -616,7 +940,8 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
         ) : null}
         {children}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -626,6 +951,28 @@ function Stat({ label, value, icon }) {
       <div>{icon}</div>
       <strong>{value}</strong>
       <span>{label}</span>
+    </div>
+  );
+}
+
+function CollapsiblePanel({ eyebrow, title, badge, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={`panel dashboard-panel collapsible-panel ${open ? "open" : "collapsed"}`}>
+      <div className="panel-head">
+        <div>
+          {eyebrow && <span className="eyebrow">{eyebrow}</span>}
+          <h2>{title}</h2>
+        </div>
+        <div className="panel-head-actions">
+          {badge}
+          <button className="secondary icon-text-button" type="button" onClick={() => setOpen((current) => !current)}>
+            {open ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+            {open ? "Collapse" : "Expand"}
+          </button>
+        </div>
+      </div>
+      {open && children}
     </div>
   );
 }
@@ -656,7 +1003,7 @@ function AssetVisual({ asset, className = "" }) {
 }
 
 function CompanyForm({ onCreate }) {
-  const steps = ["Company", "Logo", "Login"];
+  const steps = ["Company", "AMC", "Logo", "Login"];
   const [step, setStep] = useState(0);
   const [maxUnlockedStep, setMaxUnlockedStep] = useState(0);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -668,15 +1015,24 @@ function CompanyForm({ onCreate }) {
     phone: "",
     address: "",
     logoUrl: "",
+    assetCategoriesText: "Laptop, Printer",
+    amcStartDate: today(),
+    amcTerm: "1Y",
+    amcEndDate: addMonths(today(), 12),
     loginEmail: "",
     loginPassword: ""
   });
 
   function update(field, value) {
     setForm((current) => {
-      const sanitizedValue = field === "phone" ? normalizePhone(value) : value;
+      const sanitizedValue = field === "phone" ? normalizePhone(value) : field === "address" ? value.slice(0, 150) : value;
       const next = { ...current, [field]: sanitizedValue };
       if (field === "email" && !current.loginEmail) next.loginEmail = value;
+      if (field === "amcStartDate" || field === "amcTerm") {
+        const startDate = field === "amcStartDate" ? sanitizedValue : current.amcStartDate;
+        const term = field === "amcTerm" ? sanitizedValue : current.amcTerm;
+        next.amcEndDate = addMonths(startDate, monthsForTerm(term));
+      }
       return next;
     });
   }
@@ -690,28 +1046,47 @@ function CompanyForm({ onCreate }) {
       const result = await uploadFile(file);
       update("logoUrl", result.url);
     } catch (error) {
+<<<<<<< HEAD
       setUploadError(formatUploadError(error, "logo"));
+=======
+      setUploadError(uploadErrorMessage(error));
+>>>>>>> 4402920 (Updated Asset management app)
     } finally {
       setUploadingLogo(false);
       event.target.value = "";
     }
   }
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
     if (!isValidEmail(form.email) || !isValidEmail(form.loginEmail)) {
       setUploadError("Enter a valid client and login email address.");
       return;
     }
-    onCreate(form);
-    setForm({ companyName: "", contactPerson: "", email: "", phone: "", address: "", logoUrl: "", loginEmail: "", loginPassword: "" });
+    const created = await onCreate(form);
+    if (created === false) return;
+    setForm({
+      companyName: "",
+      contactPerson: "",
+      email: "",
+      phone: "",
+      address: "",
+      logoUrl: "",
+      assetCategoriesText: "Laptop, Printer",
+      amcStartDate: today(),
+      amcTerm: "1Y",
+      amcEndDate: addMonths(today(), 12),
+      loginEmail: "",
+      loginPassword: ""
+    });
     setStep(0);
     setMaxUnlockedStep(0);
   }
 
   function canContinue() {
     if (step === 0) return Boolean(form.companyName.trim() && form.contactPerson.trim() && form.email.trim());
-    if (step === 1) return true;
+    if (step === 1) return Boolean(form.amcStartDate && form.amcTerm);
+    if (step === 2) return true;
     return Boolean(form.loginEmail.trim() && form.loginPassword.trim());
   }
 
@@ -769,16 +1144,41 @@ function CompanyForm({ onCreate }) {
           </label>
           <label>
             Phone
-            <input inputMode="numeric" placeholder="Phone" value={form.phone} onChange={(event) => update("phone", event.target.value)} />
+            <input inputMode="numeric" placeholder="Phone" value={form.phone} onChange={(event) => update("phone", event.target.value)} maxLength={10} />
           </label>
           <label>
             Address
-            <textarea placeholder="Address" value={form.address} onChange={(event) => update("address", event.target.value)} />
+            <textarea placeholder="Address" value={form.address} onChange={(event) => update("address", event.target.value)} maxLength={150} />
           </label>
         </div>
       )}
 
       {step === 1 && (
+        <div className="wizard-step company-wizard-step">
+          <h3>AMC and categories</h3>
+          <p>Set the contract period and the asset categories that belong to this company.</p>
+          <label>
+            AMC starts
+            <input type="date" value={form.amcStartDate} onChange={(event) => update("amcStartDate", event.target.value)} />
+          </label>
+          <label>
+            AMC period
+            <select value={form.amcTerm} onChange={(event) => update("amcTerm", event.target.value)}>
+              {AMC_TERMS.map((term) => <option key={term.label} value={term.label}>{term.label}</option>)}
+            </select>
+          </label>
+          <label>
+            AMC ends
+            <input type="date" value={form.amcEndDate} onChange={(event) => update("amcEndDate", event.target.value)} />
+          </label>
+          <label>
+            Company categories
+            <input placeholder="Laptop, CCTV, Printer" value={form.assetCategoriesText} onChange={(event) => update("assetCategoriesText", event.target.value)} />
+          </label>
+        </div>
+      )}
+
+      {step === 2 && (
         <div className="wizard-step company-wizard-step">
           <h3>Company logo</h3>
           <p>Upload a company logo. It will appear in company records and client pages.</p>
@@ -798,7 +1198,7 @@ function CompanyForm({ onCreate }) {
         </div>
       )}
 
-      {step === 2 && (
+      {step === 3 && (
         <div className="wizard-step company-wizard-step">
           <h3>Client login</h3>
           <p>Create the login ID and password this company will use in the Client portal.</p>
@@ -810,6 +1210,7 @@ function CompanyForm({ onCreate }) {
             Password
             <input type="password" placeholder="Create password" value={form.loginPassword} onChange={(event) => update("loginPassword", event.target.value)} required />
           </label>
+          <PasswordPolicyHint password={form.loginPassword} />
           <div className="review-box">
             <strong>{form.companyName || "Company name"}</strong>
             <small>Client portal login: {form.loginEmail || "Not set"}</small>
@@ -858,7 +1259,13 @@ function EngineerModal({ engineers, onClose, onCreate, onUpdateStatus }) {
         </div>
         <form className="form-grid engineer-form-grid" onSubmit={submit}>
           <input placeholder="Engineer name" value={form.name} onChange={(event) => update("name", event.target.value)} required />
+<<<<<<< HEAD
           <input inputMode="numeric" placeholder="Phone number" value={form.phone} onChange={(event) => update("phone", event.target.value)} />
+=======
+          <input type="email" placeholder="Engineer email" value={form.email} onChange={(event) => update("email", event.target.value)} />
+          <input inputMode="numeric" placeholder="Phone" value={form.phone} onChange={(event) => update("phone", event.target.value)} maxLength={10} />
+          <input placeholder="Specialization" value={form.specialization} onChange={(event) => update("specialization", event.target.value)} />
+>>>>>>> 4402920 (Updated Asset management app)
           <select value={form.status} onChange={(event) => update("status", event.target.value)}>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
@@ -937,13 +1344,54 @@ function CompanyList({ clients, assets }) {
 }
 
 function CompanyEditor({ client, assets, onUpdate, onDelete }) {
-  const [form, setForm] = useState(client);
+  const [form, setForm] = useState({
+    ...client,
+    assetCategoriesText: clientCategories(client).join(", "),
+    renewalTerm: client.amcTerm || "1Y"
+  });
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const assignedAssets = assets.filter((asset) => asset.clientId === client.id);
+  const canEditAmc = isWithinAmcEditWindow(client);
 
   function update(field, value) {
-    setForm((current) => ({ ...current, [field]: value }));
+    if (["amcStartDate", "amcTerm", "amcEndDate"].includes(field) && !canEditAmc) return;
+    setForm((current) => {
+      const sanitizedValue = field === "phone" ? normalizePhone(value) : field === "address" ? value.slice(0, 150) : value;
+      const next = { ...current, [field]: sanitizedValue };
+      if (field === "amcStartDate" || field === "amcTerm") {
+        const startDate = field === "amcStartDate" ? sanitizedValue : current.amcStartDate;
+        const term = field === "amcTerm" ? sanitizedValue : current.amcTerm;
+        next.amcEndDate = addMonths(startDate, monthsForTerm(term));
+      }
+      return next;
+    });
+  }
+
+  function normalizedCompanyForm(nextForm = form) {
+    const { assetCategoriesText, renewalTerm, ...company } = nextForm;
+    return {
+      ...company,
+      assetCategories: assetCategoriesText
+        .split(",")
+        .map((category) => category.trim())
+        .filter(Boolean)
+    };
+  }
+
+  function renewAmc() {
+    if (!canEditAmc) return;
+    const nextStartDate = form.amcEndDate || today();
+    const nextEndDate = addMonths(nextStartDate, monthsForTerm(form.renewalTerm));
+    const next = {
+      ...form,
+      amcStartDate: nextStartDate,
+      amcEndDate: nextEndDate,
+      amcTerm: form.renewalTerm,
+      amcRenewalNoticeSentAt: ""
+    };
+    setForm(next);
+    onUpdate(normalizedCompanyForm(next), "renewed");
   }
 
   async function uploadLogo(event) {
@@ -955,7 +1403,11 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
       const result = await uploadFile(file);
       update("logoUrl", result.url);
     } catch (error) {
+<<<<<<< HEAD
       setUploadError(formatUploadError(error, "logo"));
+=======
+      setUploadError(uploadErrorMessage(error));
+>>>>>>> 4402920 (Updated Asset management app)
     } finally {
       setUploadingLogo(false);
       event.target.value = "";
@@ -968,7 +1420,7 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
       setUploadError("Enter a valid client email address.");
       return;
     }
-    onUpdate(form);
+    onUpdate(normalizedCompanyForm());
   }
 
   return (
@@ -987,12 +1439,34 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
       <input type="file" accept=".jpg,.jpeg,.png" onChange={uploadLogo} disabled={uploadingLogo} />
       {uploadingLogo && <small className="upload-note">Uploading logo...</small>}
       {uploadError && <small className="upload-error">{uploadError}</small>}
-      <input inputMode="numeric" placeholder="Phone" value={form.phone} onChange={(event) => update("phone", event.target.value)} />
+      <input placeholder="Categories: Laptop, CCTV" value={form.assetCategoriesText} onChange={(event) => update("assetCategoriesText", event.target.value)} />
+      <div className="field-grid">
+        <input type="date" value={form.amcStartDate || ""} onChange={(event) => update("amcStartDate", event.target.value)} disabled={!canEditAmc} />
+        <select value={form.amcTerm || "1Y"} onChange={(event) => update("amcTerm", event.target.value)} disabled={!canEditAmc}>
+          {AMC_TERMS.map((term) => <option key={term.label} value={term.label}>{term.label}</option>)}
+        </select>
+      </div>
+      <input type="date" value={form.amcEndDate || ""} onChange={(event) => update("amcEndDate", event.target.value)} disabled={!canEditAmc} />
+      <div className="review-box">
+        <strong>AMC renewal</strong>
+        <small>
+          {canEditAmc
+            ? `Current end date: ${form.amcEndDate || "Not set"}`
+            : `Locked until 10 days before ${form.amcEndDate || "AMC end date"}.`}
+        </small>
+        <div className="field-grid">
+          <select value={form.renewalTerm || "1Y"} onChange={(event) => update("renewalTerm", event.target.value)} disabled={!canEditAmc}>
+            {AMC_TERMS.map((term) => <option key={term.label} value={term.label}>{term.label}</option>)}
+          </select>
+          <button className="secondary" type="button" onClick={renewAmc} disabled={!canEditAmc}>Renew AMC</button>
+        </div>
+      </div>
+      <input inputMode="numeric" placeholder="Phone" value={form.phone} onChange={(event) => update("phone", event.target.value)} maxLength={10} />
       <select value={form.status} onChange={(event) => update("status", event.target.value)}>
         <option value="active">Active</option>
         <option value="inactive">Inactive</option>
       </select>
-      <textarea placeholder="Address" value={form.address} onChange={(event) => update("address", event.target.value)} />
+      <textarea placeholder="Address" value={form.address} onChange={(event) => update("address", event.target.value)} maxLength={150} />
       <button className="primary" type="submit"><Save size={16} /> Save company</button>
       <button className="danger" type="button" disabled={assignedAssets.length > 0} onClick={() => onDelete(client.id)}>
         <Trash2 size={16} /> Delete company
@@ -1002,48 +1476,94 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
   );
 }
 
-function CompaniesPage({ data, setData, notify }) {
+function CompaniesPage({ user, data, setData, notify }) {
   const [selectedId, setSelectedId] = useState(data.clients[0]?.id);
   const selected = data.clients.find((client) => client.id === selectedId) || data.clients[0];
 
-  function createCompany(form) {
-    const clientId = uid("c");
-    const client = {
-      id: clientId,
+  async function createCompany(form) {
+    try {
+      const payload = {
       companyName: form.companyName,
       contactPerson: form.contactPerson,
       email: form.email,
       phone: form.phone,
       address: form.address,
       logoUrl: form.logoUrl,
-      status: "active"
+      assetCategories: form.assetCategoriesText
+        .split(",")
+        .map((category) => category.trim())
+        .filter(Boolean),
+      amcStartDate: form.amcStartDate,
+      amcEndDate: form.amcEndDate,
+      amcTerm: form.amcTerm,
+      status: "active",
+      loginEmail: form.loginEmail,
+      loginPassword: form.loginPassword
     };
-    const user = {
-      id: uid("u"),
-      name: form.contactPerson,
-      email: form.loginEmail,
-      password: form.loginPassword,
-      role: "client",
-      clientId
-    };
-    setData((current) => ({ ...current, clients: [client, ...current.clients], users: [user, ...current.users] }));
-    setSelectedId(client.id);
-    notify(`Added ${client.companyName}.`);
+      const result = await apiRequest("/companies", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      const nextState = result.state || data;
+      setDataState(nextState);
+      saveState(nextState);
+      clearPendingState();
+      setPendingSync(false);
+      setApiStatus("connected");
+      setSelectedId(result.company.id);
+      const welcomeStatus = result.email?.welcome;
+      if (welcomeStatus?.failed > 0 || welcomeStatus?.skipped) {
+        notify(`Added ${result.company.companyName}, but email was not sent. Check SMTP settings.`, "warning");
+      } else {
+        notify(`Added ${result.company.companyName} and sent client email.`);
+      }
+      return true;
+    } catch (error) {
+      notify(friendlyErrorMessage(error), "error");
+      return false;
+    }
   }
 
-  function updateCompany(form) {
-    setData((current) => ({
-      ...current,
-      clients: current.clients.map((client) => client.id === form.id ? form : client)
-    }));
-    notify(`Updated ${form.companyName}.`);
+  function updateCompany(form, action = "updated") {
+    setData((current) => withNotification(
+      {
+        ...current,
+        clients: current.clients.map((client) => client.id === form.id ? form : client)
+      },
+      {
+        type: action === "renewed" ? "amc_renewed" : "company_updated",
+        title: action === "renewed" ? "AMC renewed" : "Company updated",
+        message: action === "renewed" ? `${form.companyName} AMC was renewed by admin.` : `${form.companyName} company details were updated by admin.`,
+        clientId: form.id,
+        actorRole: "admin",
+        actorName: user.name,
+        entityType: action === "renewed" ? "amc" : "company",
+        entityId: form.id
+      }
+    ));
+    notify(action === "renewed" ? `Renewed AMC for ${form.companyName}.` : `Updated ${form.companyName}.`);
   }
 
   function deleteCompany(clientId) {
     setData((current) => {
       const remaining = current.clients.filter((client) => client.id !== clientId);
       setSelectedId(remaining[0]?.id);
-      return { ...current, clients: remaining, users: current.users.filter((user) => user.clientId !== clientId) };
+      const deletedClient = current.clients.find((client) => client.id === clientId);
+      return withNotification(
+        { ...current, clients: remaining, users: current.users.filter((item) => item.clientId !== clientId) },
+        {
+          type: "company_deleted",
+          title: "Company deleted",
+          message: `${deletedClient?.companyName || "A company"} was deleted by admin.`,
+          clientId,
+          companyName: deletedClient?.companyName,
+          actorRole: "admin",
+          actorName: user.name,
+          entityType: "company",
+          entityId: clientId,
+          tone: "warning"
+        }
+      );
     });
     notify("Company deleted.");
   }
@@ -1077,13 +1597,13 @@ function CompaniesPage({ data, setData, notify }) {
 
 function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
   const scopedServiceRecords = getScopedServiceRecords(data.serviceRecords, scopedAssets);
-  const openAppeals = scopedAppeals.filter((appeal) => !["resolved", "closed", "approved"].includes(appeal.status));
-  const dueServices = scopedServiceRecords.filter((record) => record.nextServiceDue && record.nextServiceDue <= "2026-06-30");
+  const openAppeals = scopedAppeals.filter((appeal) => !["resolved", "closed", "approved"].includes(appeal.status) && isPriorityAppeal(appeal));
+  const dueServices = scopedServiceRecords.filter((record) => isPriorityServiceRecord(record) && record.nextServiceDue && record.nextServiceDue <= "2026-06-30");
   const inServiceAssets = scopedAssets.filter((asset) => ["in_service", "repairing"].includes(asset.status));
-  const attentionAssets = scopedAssets.filter((asset) => asset.status !== "active");
+  const attentionAssets = scopedAssets.filter(isPriorityAsset);
   const recentAppeals = [...openAppeals].sort((first, second) => new Date(second.updatedAt) - new Date(first.updatedAt)).slice(0, 4);
   const serviceDueList = [...dueServices].sort((first, second) => String(first.nextServiceDue).localeCompare(String(second.nextServiceDue))).slice(0, 4);
-  const recentServiceHistory = sortByNewestDate(scopedServiceRecords, "serviceDate").slice(0, 5);
+  const recentServiceHistory = sortByNewestDate(scopedServiceRecords.filter(isPriorityServiceRecord), "serviceDate").slice(0, 5);
 
   if (user.role === "admin") {
     return (
@@ -1102,14 +1622,7 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
         </div>
 
         <div className="dashboard-main-grid">
-          <div className="panel dashboard-panel">
-            <div className="panel-head">
-              <div>
-                <span className="eyebrow">Issue queue</span>
-                <h2>Appeals needing review</h2>
-              </div>
-              <span className="badge open">{openAppeals.length}</span>
-            </div>
+          <CollapsiblePanel eyebrow="Issue queue" title="Priority appeals" badge={<span className="badge open">{openAppeals.length}</span>}>
             <div className="dashboard-list">
               {recentAppeals.length > 0 ? recentAppeals.map((appeal) => {
                 const asset = data.assets.find((item) => item.id === appeal.assetId);
@@ -1126,16 +1639,9 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
                 );
               }) : <div className="empty-inline">No appeal activity yet.</div>}
             </div>
-          </div>
+          </CollapsiblePanel>
 
-          <div className="panel dashboard-panel">
-            <div className="panel-head">
-              <div>
-                <span className="eyebrow">Service calendar</span>
-                <h2>Upcoming service work</h2>
-              </div>
-              <span className="badge pending">{serviceDueList.length}</span>
-            </div>
+          <CollapsiblePanel eyebrow="Service calendar" title="Priority upcoming service" badge={<span className="badge pending">{serviceDueList.length}</span>}>
             <div className="dashboard-list">
               {serviceDueList.length > 0 ? serviceDueList.map((record) => {
                 const asset = data.assets.find((item) => item.id === record.assetId);
@@ -1151,17 +1657,11 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
                 );
               }) : <div className="empty-inline">No service due in the current window.</div>}
             </div>
-          </div>
+          </CollapsiblePanel>
         </div>
 
         <div className="dashboard-lower-grid">
-          <div className="panel dashboard-panel">
-            <div className="panel-head">
-              <div>
-                <span className="eyebrow">Company coverage</span>
-                <h2>Client asset distribution</h2>
-              </div>
-            </div>
+          <CollapsiblePanel eyebrow="Company coverage" title="Client asset distribution" badge={<span className="badge active">{data.clients.length}</span>}>
             <div className="company-list compact-company-list">
               {data.clients.map((client) => (
                 <div className="company-row" key={client.id}>
@@ -1174,22 +1674,15 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
                 </div>
               ))}
             </div>
-          </div>
+          </CollapsiblePanel>
 
-          <div className="panel dashboard-panel">
-            <div className="panel-head">
-              <div>
-                <span className="eyebrow">Asset condition</span>
-                <h2>Needs attention</h2>
-              </div>
-              <span className="badge in-service">{attentionAssets.length}</span>
-            </div>
+          <CollapsiblePanel eyebrow="Asset condition" title="Priority assets" badge={<span className="badge in-service">{attentionAssets.length}</span>}>
             <div className="asset-list compact">
               {attentionAssets.length > 0 ? attentionAssets.map((asset) => (
                 <AssetRow key={asset.id} asset={asset} client={data.clients.find((client) => client.id === asset.clientId)} />
               )) : <div className="empty-inline">All assets are currently active.</div>}
             </div>
-          </div>
+          </CollapsiblePanel>
         </div>
       </section>
     );
@@ -1219,8 +1712,7 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
         <Stat label="Under repair" value={inServiceAssets.length} icon={<Clock />} />
         <Stat label="Service due" value={dueServices.length} icon={<History />} />
       </div>
-      <div className="panel">
-        <h2>Service history</h2>
+      <CollapsiblePanel title="Service history" badge={<span className="badge active">{recentServiceHistory.length}</span>}>
         <div className="timeline">
           {recentServiceHistory.length > 0 ? recentServiceHistory.map((record) => {
             const asset = scopedAssets.find((item) => item.id === record.assetId);
@@ -1234,9 +1726,8 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
             );
           }) : <div className="empty-inline">No service history yet.</div>}
         </div>
-      </div>
-      <div className="panel">
-        <h2>Recent appeal history</h2>
+      </CollapsiblePanel>
+      <CollapsiblePanel title="Priority appeal history" badge={<span className="badge open">{recentAppeals.length}</span>}>
         <div className="timeline">
           {recentAppeals.length > 0 ? recentAppeals.map((appeal) => (
             <div key={appeal.id} className="timeline-item">
@@ -1246,15 +1737,14 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
             </div>
           )) : <div className="empty-inline">No appeal history yet.</div>}
         </div>
-      </div>
-      <div className="panel">
-        <h2>Assets needing attention</h2>
+      </CollapsiblePanel>
+      <CollapsiblePanel title="Priority assets" badge={<span className="badge in-service">{attentionAssets.length}</span>}>
         <div className="asset-list compact">
           {attentionAssets.length > 0 ? attentionAssets.map((asset) => (
             <AssetRow key={asset.id} asset={asset} client={data.clients.find((client) => client.id === asset.clientId)} />
           )) : <div className="empty-inline">All assets are currently active.</div>}
         </div>
-      </div>
+      </CollapsiblePanel>
     </section>
   );
 }
@@ -1292,13 +1782,24 @@ function AssetRow({ asset, client, selected, onSelect, onEdit }) {
   );
 }
 
+<<<<<<< HEAD
 function AssetForm({ clients, categories, existingAssets, onCreate }) {
   const steps = ["Asset code", "Category", "Asset name", "User name"];
+=======
+function AssetForm({ clients, categories, existingAssets, onCreate, lockedClientId = "" }) {
+  const steps = ["Assign", "Identify", "Lifecycle", "Media"];
+>>>>>>> 4402920 (Updated Asset management app)
   const [step, setStep] = useState(0);
   const [maxUnlockedStep, setMaxUnlockedStep] = useState(0);
   const [form, setForm] = useState({
+<<<<<<< HEAD
     clientId: clients[0]?.id || "",
     assetCode: "",
+=======
+    name: "",
+    assetCode: "",
+    clientId: lockedClientId || clients[0]?.id || "",
+>>>>>>> 4402920 (Updated Asset management app)
     category: categories[0] || "",
     name: "",
     userName: ""
@@ -1306,7 +1807,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate }) {
 
   useEffect(() => {
     setForm((current) => {
-      const nextClientId = clients.some((client) => client.id === current.clientId) ? current.clientId : (clients[0]?.id || "");
+      const nextClientId = lockedClientId || (clients.some((client) => client.id === current.clientId) ? current.clientId : (clients[0]?.id || ""));
       const nextCategory = categories.includes(current.category) ? current.category : (categories[0] || "");
       return {
         ...current,
@@ -1315,7 +1816,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate }) {
         assetCode: generateAssetCode(clients, existingAssets, nextClientId, nextCategory)
       };
     });
-  }, [clients, categories, existingAssets]);
+  }, [clients, categories, existingAssets, lockedClientId]);
 
   function update(field, value) {
     setForm((current) => {
@@ -1329,18 +1830,51 @@ function AssetForm({ clients, categories, existingAssets, onCreate }) {
     });
   }
 
+<<<<<<< HEAD
   function canContinue() {
     if (step === 0) return Boolean(form.assetCode);
     if (step === 1) return Boolean(form.category);
     if (step === 2) return Boolean(form.name.trim());
     return Boolean(form.userName.trim());
+=======
+  async function uploadAssetImage(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    setUploadError("");
+    try {
+      const result = await uploadFile(file);
+      update("image", result.url);
+    } catch (error) {
+      setUploadError(uploadErrorMessage(error));
+    } finally {
+      setUploadingImage(false);
+      event.target.value = "";
+    }
+  }
+
+  async function uploadAssetDocument(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingDocument(true);
+    setUploadError("");
+    try {
+      const result = await uploadFile(file);
+      setForm((current) => ({ ...current, documents: [...current.documents, result.url] }));
+    } catch (error) {
+      setUploadError(uploadErrorMessage(error));
+    } finally {
+      setUploadingDocument(false);
+      event.target.value = "";
+    }
+>>>>>>> 4402920 (Updated Asset management app)
   }
 
   function submit(event) {
     event.preventDefault();
     if (!canContinue() || step !== steps.length - 1) return;
     onCreate(form);
-    const defaultClientId = clients[0]?.id || "";
+    const defaultClientId = lockedClientId || clients[0]?.id || "";
     const defaultCategory = categories[0] || "";
     setForm({
       clientId: defaultClientId,
@@ -1399,11 +1933,32 @@ function AssetForm({ clients, categories, existingAssets, onCreate }) {
 
       {step === 0 && (
         <div className="wizard-step">
+<<<<<<< HEAD
           <h3>Asset code</h3>
           <p>Generated automatically from the company and category selection.</p>
           <label>
             Asset code
             <input value={form.assetCode} readOnly />
+=======
+          <h3>Assign to company</h3>
+          <p>Select the client company that owns or uses this asset.</p>
+          {lockedClientId ? (
+            <div className="review-box">
+              <strong>{clients.find((client) => client.id === lockedClientId)?.companyName || "Your company"}</strong>
+              <small>New assets are added under your client account.</small>
+            </div>
+          ) : (
+            <label>
+              Company
+              <select value={form.clientId} onChange={(event) => update("clientId", event.target.value)}>
+                {clients.map((client) => <option key={client.id} value={client.id}>{client.companyName}</option>)}
+              </select>
+            </label>
+          )}
+          <label>
+            Location
+            <input placeholder="Office, department, site, or room" value={form.location} onChange={(event) => update("location", event.target.value)} />
+>>>>>>> 4402920 (Updated Asset management app)
           </label>
         </div>
       )}
@@ -1455,7 +2010,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate }) {
   );
 }
 
-function AssetEditor({ asset, clients, categories, onUpdate, onDelete }) {
+function AssetEditor({ asset, clients, categories, onUpdate, onDelete, canDelete = false, lockedClientId = "" }) {
   const [form, setForm] = useState(asset);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -1473,7 +2028,11 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete }) {
       const result = await uploadFile(file);
       setForm((current) => ({ ...current, images: [result.url, ...(current.images || []).slice(1)] }));
     } catch (error) {
+<<<<<<< HEAD
       setUploadError(formatUploadError(error, "image"));
+=======
+      setUploadError(uploadErrorMessage(error));
+>>>>>>> 4402920 (Updated Asset management app)
     } finally {
       setUploadingImage(false);
       event.target.value = "";
@@ -1508,10 +2067,23 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete }) {
       </div>
       <input placeholder="Asset code" value={form.assetCode} readOnly />
       <input placeholder="Asset name" value={form.name} onChange={(event) => update("name", event.target.value)} required />
+<<<<<<< HEAD
       <input placeholder="User name" value={form.userName || ""} onChange={(event) => update("userName", event.target.value)} />
       <select value={form.clientId} onChange={(event) => update("clientId", event.target.value)}>
         {clients.map((client) => <option key={client.id} value={client.id}>{client.companyName}</option>)}
       </select>
+=======
+      {lockedClientId ? (
+        <div className="review-box">
+          <strong>{clients.find((client) => client.id === lockedClientId)?.companyName || "Your company"}</strong>
+          <small>Company assignment is managed by admin.</small>
+        </div>
+      ) : (
+        <select value={form.clientId} onChange={(event) => update("clientId", event.target.value)}>
+          {clients.map((client) => <option key={client.id} value={client.id}>{client.companyName}</option>)}
+        </select>
+      )}
+>>>>>>> 4402920 (Updated Asset management app)
       <select value={form.category} onChange={(event) => update("category", event.target.value)}>
         {categories.map((category) => <option key={category} value={category}>{category}</option>)}
       </select>
@@ -1532,7 +2104,7 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete }) {
       </select>
       <textarea placeholder="Notes" value={form.notes} onChange={(event) => update("notes", event.target.value)} />
       <button className="primary" type="submit"><Save size={16} /> Save asset</button>
-      <button className="danger" type="button" onClick={() => onDelete(asset.id)}><Trash2 size={16} /> Delete asset</button>
+      {canDelete && <button className="danger" type="button" onClick={() => onDelete(asset.id)}><Trash2 size={16} /> Delete asset</button>}
     </form>
   );
 }
@@ -1551,7 +2123,11 @@ function AssetMediaPanel({ asset, onAddImage, onAddDocument, onRemoveImage, onRe
       const result = await uploadFile(file);
       onAddImage(result.url);
     } catch (error) {
+<<<<<<< HEAD
       setUploadError(formatUploadError(error, "image"));
+=======
+      setUploadError(uploadErrorMessage(error));
+>>>>>>> 4402920 (Updated Asset management app)
     } finally {
       setUploadingImage(false);
       event.target.value = "";
@@ -1567,7 +2143,11 @@ function AssetMediaPanel({ asset, onAddImage, onAddDocument, onRemoveImage, onRe
       const result = await uploadFile(file);
       onAddDocument(result.url);
     } catch (error) {
+<<<<<<< HEAD
       setUploadError(formatUploadError(error, "document"));
+=======
+      setUploadError(uploadErrorMessage(error));
+>>>>>>> 4402920 (Updated Asset management app)
     } finally {
       setUploadingDocument(false);
       event.target.value = "";
@@ -1658,15 +2238,30 @@ function LifecycleManager({ asset, onAddLifecycle }) {
   );
 }
 
-function AssetsPage({ user, data, scopedAssets, setData, notify }) {
+function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }) {
   const [query, setQuery] = useState("");
+  const [filterClientId, setFilterClientId] = useState(user.role === "admin" ? (data.clients[0]?.id || "") : user.clientId);
+  const [filterCategory, setFilterCategory] = useState("");
   const [selectedId, setSelectedId] = useState(scopedAssets[0]?.id);
+<<<<<<< HEAD
   const [editingId, setEditingId] = useState(null);
   const [showAssetForm, setShowAssetForm] = useState(false);
+=======
+  const [assetView, setAssetView] = useState("details");
+>>>>>>> 4402920 (Updated Asset management app)
   const assetCategories = data.assetCategories || [];
-  const selected = scopedAssets.find((asset) => asset.id === selectedId) || scopedAssets[0];
+  const editableClients = user.role === "admin" ? data.clients : data.clients.filter((client) => client.id === user.clientId);
+  const selectedClient = editableClients.find((client) => client.id === filterClientId) || editableClients[0];
+  const selectedCompanyCategories = clientCategories(selectedClient, assetCategories);
+  const selected = scopedAssets.find((asset) => asset.id === selectedId) || scopedAssets.find((asset) => asset.clientId === selectedClient?.id);
   const filtered = scopedAssets.filter((asset) =>
+<<<<<<< HEAD
     [asset.name, asset.assetCode, asset.category, asset.userName].join(" ").toLowerCase().includes(query.toLowerCase())
+=======
+    (!filterClientId || asset.clientId === filterClientId) &&
+    (!filterCategory || asset.category === filterCategory) &&
+    [asset.name, asset.assetCode, asset.category, asset.serialNumber].join(" ").toLowerCase().includes(query.toLowerCase())
+>>>>>>> 4402920 (Updated Asset management app)
   );
   const groupedAssets = user.role === "admin"
     ? data.clients
@@ -1680,6 +2275,22 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
     ? data.clients.filter((client) => client.id === user.clientId)
     : data.clients;
 
+  useEffect(() => {
+    if (!filterClientId && editableClients[0]?.id) setFilterClientId(editableClients[0].id);
+  }, [editableClients, filterClientId]);
+
+  useEffect(() => {
+    if (filterCategory && !selectedCompanyCategories.includes(filterCategory)) {
+      setFilterCategory("");
+    }
+  }, [filterCategory, selectedCompanyCategories]);
+
+  useEffect(() => {
+    if (filtered.length > 0 && !filtered.some((asset) => asset.id === selectedId)) {
+      setSelectedId(filtered[0].id);
+    }
+  }, [filtered, selectedId]);
+
   function createAsset(form) {
     const assetCode = generateAssetCode(data.clients, data.assets, form.clientId, form.category);
     const asset = {
@@ -1689,6 +2300,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
       name: form.name,
       userName: form.userName,
       category: form.category,
+<<<<<<< HEAD
       brand: "",
       model: "",
       serialNumber: "",
@@ -1709,32 +2321,84 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
     setSelectedId(asset.id);
     setEditingId(null);
     setShowAssetForm(false);
+=======
+      brand: form.brand,
+      model: form.model,
+      serialNumber: form.serialNumber,
+      purchaseDate: form.purchaseDate,
+      warrantyEndDate: form.warrantyEndDate,
+      location: form.location,
+      status: form.status,
+      notes: form.notes,
+      images: form.image ? [form.image] : [],
+      documents: form.documents || [],
+      lifecycle: [{ id: uid("l"), type: "Created", description: `Asset created by ${user.role}.`, createdAt: today() }]
+    };
+    setData((current) => withNotification(
+      { ...current, assets: [asset, ...current.assets] },
+      {
+        type: "asset_created",
+        title: "Asset added",
+        message: `${asset.name} was added by ${user.role}.`,
+        clientId: asset.clientId,
+        actorRole: user.role,
+        actorName: user.name,
+        entityType: "asset",
+        entityId: asset.id
+      }
+    ));
+    setSelectedId(asset.id);
+    setAssetView("details");
+>>>>>>> 4402920 (Updated Asset management app)
     notify(`Added ${asset.name}.`);
   }
 
   function updateStatus(assetId, status) {
-    setData((current) => ({
-      ...current,
-      assets: current.assets.map((asset) =>
-        asset.id === assetId
-          ? {
-              ...asset,
-              status,
-              lifecycle: [
-                ...asset.lifecycle,
-                { id: uid("l"), type: "Status", description: `Status changed to ${status.replace("_", " ")}.`, createdAt: today() }
-              ]
-            }
-          : asset
-      )
-    }));
+    setData((current) => {
+      const changedAsset = current.assets.find((asset) => asset.id === assetId);
+      return withNotification(
+        {
+          ...current,
+          assets: current.assets.map((asset) =>
+            asset.id === assetId
+              ? {
+                  ...asset,
+                  status,
+                  lifecycle: [
+                    ...asset.lifecycle,
+                    { id: uid("l"), type: "Status", description: `Status changed to ${status.replace("_", " ")}.`, createdAt: today() }
+                  ]
+                }
+              : asset
+          )
+        },
+        {
+          type: "asset_status",
+          title: "Asset status changed",
+          message: `${changedAsset?.name || "Asset"} was marked ${formatStatusLabel(status).toLowerCase()} by admin.`,
+          clientId: changedAsset?.clientId,
+          actorRole: "admin",
+          actorName: user.name,
+          entityType: "asset",
+          entityId: assetId
+        }
+      );
+    });
   }
 
   function updateAsset(form) {
+<<<<<<< HEAD
     let blocked = false;
     setData((current) => {
       const nextAssetCode = generateAssetCode(current.clients, current.assets, form.clientId, form.category, form.id);
       const nextAssets = current.assets.map((asset) => {
+=======
+    setData((current) => {
+      let updatedAsset = null;
+      const nextState = {
+        ...current,
+        assets: current.assets.map((asset) => {
+>>>>>>> 4402920 (Updated Asset management app)
         if (asset.id !== form.id) return asset;
         const lifecycle = [...asset.lifecycle];
         if (asset.clientId !== form.clientId) {
@@ -1744,6 +2408,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
         if (asset.status !== form.status) {
           lifecycle.push({ id: uid("l"), type: "Status", description: `Status changed to ${form.status.replace("_", " ")}.`, createdAt: today() });
         }
+<<<<<<< HEAD
         lifecycle.push({ id: uid("l"), type: "Updated", description: "Asset details updated by admin.", createdAt: today() });
         return { ...asset, ...form, assetCode: nextAssetCode, lifecycle };
       });
@@ -1758,43 +2423,98 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
       return;
     }
     setEditingId(null);
+=======
+        lifecycle.push({ id: uid("l"), type: "Updated", description: `Asset details updated by ${user.role}.`, createdAt: today() });
+        updatedAsset = { ...asset, ...form, clientId: user.role === "admin" ? form.clientId : asset.clientId, assetCode: nextAssetCode, lifecycle };
+        return updatedAsset;
+      })
+      };
+      return withNotification(nextState, {
+        type: "asset_updated",
+        title: "Asset updated",
+        message: `${updatedAsset?.name || form.name} was updated by ${user.role}.`,
+        clientId: updatedAsset?.clientId || form.clientId,
+        actorRole: user.role,
+        actorName: user.name,
+        entityType: "asset",
+        entityId: form.id
+      });
+    });
+    setAssetView("details");
+>>>>>>> 4402920 (Updated Asset management app)
     notify(`Updated ${form.name}.`);
   }
 
   function deleteAsset(assetId) {
+    if (user.role !== "admin") {
+      notify("Only admin can delete assets.", "error");
+      return;
+    }
     setData((current) => {
       const remainingAssets = current.assets.filter((asset) => asset.id !== assetId);
       const deletedAppealIds = current.appeals.filter((appeal) => appeal.assetId === assetId).map((appeal) => appeal.id);
       setSelectedId(remainingAssets[0]?.id);
+<<<<<<< HEAD
       setEditingId((currentEditingId) => (currentEditingId === assetId ? null : currentEditingId));
       return {
+=======
+      const deletedAsset = current.assets.find((asset) => asset.id === assetId);
+      return withNotification({
+>>>>>>> 4402920 (Updated Asset management app)
         ...current,
         assets: remainingAssets,
         serviceRecords: current.serviceRecords.filter((record) => record.assetId !== assetId),
         appeals: current.appeals.filter((appeal) => appeal.assetId !== assetId),
         appealMessages: current.appealMessages.filter((message) => !deletedAppealIds.includes(message.appealId))
-      };
+      }, {
+        type: "asset_deleted",
+        title: "Asset deleted",
+        message: `${deletedAsset?.name || "Asset"} was deleted by admin.`,
+        clientId: deletedAsset?.clientId,
+        actorRole: "admin",
+        actorName: user.name,
+        entityType: "asset",
+        entityId: assetId,
+        tone: "warning"
+      });
     });
+<<<<<<< HEAD
+=======
+    setAssetView("details");
+>>>>>>> 4402920 (Updated Asset management app)
     notify("Asset deleted.");
   }
 
   function addImage(assetId, imageUrl) {
-    setData((current) => ({
-      ...current,
-      assets: current.assets.map((asset) =>
-        asset.id === assetId
-          ? {
-              ...asset,
-              images: [...asset.images, imageUrl],
-              lifecycle: [...asset.lifecycle, { id: uid("l"), type: "Image", description: "Asset image added.", createdAt: today() }]
-            }
-          : asset
-      )
-    }));
+    setData((current) => {
+      const changedAsset = current.assets.find((asset) => asset.id === assetId);
+      return withNotification({
+        ...current,
+        assets: current.assets.map((asset) =>
+          asset.id === assetId
+            ? {
+                ...asset,
+                images: [...asset.images, imageUrl],
+                lifecycle: [...asset.lifecycle, { id: uid("l"), type: "Image", description: "Asset image added.", createdAt: today() }]
+              }
+            : asset
+        )
+      }, {
+        type: "asset_media",
+        title: "Asset image added",
+        message: `${changedAsset?.name || "Asset"} received a new image from ${user.role}.`,
+        clientId: changedAsset?.clientId,
+        actorRole: user.role,
+        actorName: user.name,
+        entityType: "asset",
+        entityId: assetId
+      });
+    });
     notify("Asset image added.");
   }
 
   function addDocument(assetId, documentName) {
+<<<<<<< HEAD
     setData((current) => ({
       ...current,
       assets: current.assets.map((asset) =>
@@ -1807,6 +2527,32 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
           : asset
       )
     }));
+=======
+    setData((current) => {
+      const changedAsset = current.assets.find((asset) => asset.id === assetId);
+      return withNotification({
+        ...current,
+        assets: current.assets.map((asset) =>
+          asset.id === assetId
+            ? {
+                ...asset,
+                documents: [...asset.documents, documentName],
+                lifecycle: [...asset.lifecycle, { id: uid("l"), type: "Document", description: `${documentName} added.`, createdAt: today() }]
+              }
+            : asset
+        )
+      }, {
+        type: "asset_media",
+        title: "Asset document added",
+        message: `${changedAsset?.name || "Asset"} received a new document from ${user.role}.`,
+        clientId: changedAsset?.clientId,
+        actorRole: user.role,
+        actorName: user.name,
+        entityType: "asset",
+        entityId: assetId
+      });
+    });
+>>>>>>> 4402920 (Updated Asset management app)
     notify("Asset document added.");
   }
 
@@ -1860,15 +2606,25 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
 
   function createCategory(name) {
     const normalized = name.trim();
-    if (!normalized) return;
-    const exists = assetCategories.some((category) => category.toLowerCase() === normalized.toLowerCase());
+    const targetClientId = filterClientId || editableClients[0]?.id;
+    if (!normalized || !targetClientId) return;
+    const targetClient = data.clients.find((client) => client.id === targetClientId);
+    const exists = clientCategories(targetClient, assetCategories).some((category) => category.toLowerCase() === normalized.toLowerCase());
     if (exists) {
       notify("Category already exists.");
       return;
     }
     setData((current) => ({
       ...current,
-      assetCategories: [...(current.assetCategories || []), normalized].sort((first, second) => first.localeCompare(second))
+      clients: current.clients.map((client) =>
+        client.id === targetClientId
+          ? {
+              ...client,
+              assetCategories: [...clientCategories(client, current.assetCategories || []), normalized]
+                .sort((first, second) => first.localeCompare(second))
+            }
+          : client
+      )
     }));
     notify(`${normalized} category added.`);
   }
@@ -1887,6 +2643,16 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
 
       <div className="panel assets-rail">
         <div className="toolbar">
+          <select value={filterClientId} onChange={(event) => {
+            setFilterClientId(event.target.value);
+            setFilterCategory("");
+          }}>
+            {editableClients.map((client) => <option key={client.id} value={client.id}>{client.companyName}</option>)}
+          </select>
+          <select value={filterCategory} onChange={(event) => setFilterCategory(event.target.value)}>
+            <option value="">All categories</option>
+            {selectedCompanyCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+          </select>
           <div className="search"><Search size={16} /><input placeholder="Search assets" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
         </div>
         <div className="asset-list">
@@ -1919,6 +2685,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
         </div>
       </div>
       <div className="asset-workspace">
+<<<<<<< HEAD
         {showAssetForm && (
           <div className="asset-subpage">
             <div className="panel asset-subpage-intro">
@@ -1940,6 +2707,58 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
                     <span className={statusClass(selected.status)}>{formatStatusLabel(selected.status)}</span>
                     <h2>{selected.name}</h2>
                     <p>{selected.assetCode} / {selected.category || "Uncategorized"} / {selected.userName || "No user assigned"}</p>
+=======
+        <div className="panel asset-subnav">
+          <div>
+            <span className="eyebrow">Asset workspace</span>
+            <h2>{assetView === "add" ? "Add asset" : assetView === "edit" ? "Edit asset" : "Asset details"}</h2>
+          </div>
+          <div className="segmented-control">
+            <button className={assetView === "details" ? "active" : ""} type="button" onClick={() => setAssetView("details")}>Details</button>
+            <button className={assetView === "add" ? "active" : ""} type="button" onClick={() => setAssetView("add")}>Add asset</button>
+            <button className={assetView === "edit" ? "active" : ""} type="button" onClick={() => setAssetView("edit")} disabled={!selected}>Edit asset</button>
+          </div>
+          {user.role === "admin" && (
+            <button className="secondary" type="button" onClick={onAddEngineer}>
+              <Plus size={16} /> Add engineer
+            </button>
+          )}
+        </div>
+        {selected || assetView === "add" || user.role === "admin" ? (
+          <>
+            {assetView === "details" && selected && (
+              <>
+                <div className="panel asset-detail">
+                  <AssetVisual asset={selected} className="asset-hero-image" />
+                  <div className="asset-detail-body">
+                    <div className="asset-detail-head">
+                      <div>
+                        <span className={statusClass(selected.status)}>{formatStatusLabel(selected.status)}</span>
+                        <h2>{selected.name}</h2>
+                        <p>{selected.assetCode} / {selected.category || "Uncategorized"} / {selected.serialNumber || "No serial"}</p>
+                      </div>
+                      {user.role === "admin" && (
+                        <label className="status-control">
+                          Status
+                          <select value={selected.status} onChange={(event) => updateStatus(selected.id, event.target.value)}>
+                            <option value="active">Active</option>
+                            <option value="in_service">In service</option>
+                            <option value="repairing">Repairing</option>
+                            <option value="repaired">Repaired</option>
+                            <option value="retired">Retired</option>
+                            <option value="damaged">Damaged</option>
+                          </select>
+                        </label>
+                      )}
+                    </div>
+                    <dl className="asset-facts">
+                      <div><dt>Client</dt><dd>{data.clients.find((client) => client.id === selected.clientId)?.companyName || "Not assigned"}</dd></div>
+                      <div><dt>Brand / model</dt><dd>{selected.brand || "Not recorded"} / {selected.model || "Not recorded"}</dd></div>
+                      <div><dt>Location</dt><dd>{selected.location || "Not recorded"}</dd></div>
+                      <div><dt>Warranty ends</dt><dd>{selected.warrantyEndDate || "Not recorded"}</dd></div>
+                      <div className="wide"><dt>Notes</dt><dd>{selected.notes || "No notes"}</dd></div>
+                    </dl>
+>>>>>>> 4402920 (Updated Asset management app)
                   </div>
                   {user.role === "admin" && !editingId && (
                     <label className="status-control">
@@ -1992,11 +2811,52 @@ function AssetsPage({ user, data, scopedAssets, setData, notify }) {
                   </>
                 )}
               </>
+<<<<<<< HEAD
             ) : (
               <>
                 <AssetMediaPanel asset={selected} readOnly />
                 <HistoryPanel title="Lifecycle" items={selected.lifecycle} />
               </>
+=======
+            )}
+            {assetView === "add" && (
+              <div className="asset-subpage">
+                <div className="panel asset-subpage-intro">
+                  <span className="eyebrow">New asset</span>
+                  <h2>Create a new managed asset</h2>
+                  <p>Use the guided wizard to assign the company, record identity details, and upload starting media before saving.</p>
+                </div>
+                {user.role === "admin" && <AssetCategoryManager categories={selectedCompanyCategories} onCreateCategory={createCategory} />}
+                <AssetForm clients={editableClients} categories={selectedCompanyCategories} existingAssets={data.assets} onCreate={createAsset} lockedClientId={filterClientId || (user.role === "client" ? user.clientId : "")} />
+              </div>
+            )}
+            {assetView === "edit" && (
+              selected ? (
+                <div className="asset-subpage">
+                  <div className="panel asset-subpage-intro">
+                    <span className="eyebrow">Editing</span>
+                    <h2>{selected.name}</h2>
+                    <p>Update asset details, media, and lifecycle information from this dedicated edit workspace.</p>
+                  </div>
+                  {user.role === "admin" && <AssetCategoryManager categories={selectedCompanyCategories} onCreateCategory={createCategory} />}
+                  <AssetEditor key={selected.id} asset={selected} clients={editableClients} categories={selectedCompanyCategories} onUpdate={updateAsset} onDelete={deleteAsset} canDelete={user.role === "admin"} lockedClientId={user.role === "client" ? user.clientId : ""} />
+                  <AssetMediaPanel
+                    asset={selected}
+                    onAddImage={(imageUrl) => addImage(selected.id, imageUrl)}
+                    onAddDocument={(documentName) => addDocument(selected.id, documentName)}
+                    onRemoveImage={(imageUrl) => removeImage(selected.id, imageUrl)}
+                    onRemoveDocument={(_document, index) => removeDocument(selected.id, index)}
+                  />
+                  <LifecycleManager asset={selected} onAddLifecycle={(form) => addLifecycle(selected.id, form)} />
+                </div>
+              ) : (
+                <div className="panel empty-state">
+                  <Archive size={28} />
+                  <h2>Select an asset to edit</h2>
+                  <p>Choose an asset from the list to open its edit page.</p>
+                </div>
+              )
+>>>>>>> 4402920 (Updated Asset management app)
             )}
           </>
         ) : !showAssetForm ? (
@@ -2104,7 +2964,11 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
         attachments = [await uploadFile(newIssueFile)];
       }
     } catch (error) {
+<<<<<<< HEAD
       setUploadError(formatUploadError(error, "attachment"));
+=======
+      setUploadError(uploadErrorMessage(error));
+>>>>>>> 4402920 (Updated Asset management app)
       setUploadingAppeal(false);
       return;
     }
@@ -2131,11 +2995,24 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
           createdAt: appeal.createdAt
         }
       : null;
-    setData((current) => ({
-      ...current,
-      appeals: [appeal, ...current.appeals],
-      appealMessages: initialMessage ? [initialMessage, ...current.appealMessages] : current.appealMessages
-    }));
+    setData((current) => withNotification(
+      {
+        ...current,
+        appeals: [appeal, ...current.appeals],
+        appealMessages: initialMessage ? [initialMessage, ...current.appealMessages] : current.appealMessages
+      },
+      {
+        type: "appeal_created",
+        title: "Issue raised",
+        message: `${appeal.title} was raised by ${user.name}.`,
+        clientId: appeal.clientId,
+        actorRole: user.role,
+        actorName: user.name,
+        entityType: "appeal",
+        entityId: appeal.id,
+        tone: "warning"
+      }
+    ));
     setSelectedId(appeal.id);
     setNewIssue({ assetId: scopedAssets[0]?.id || "", title: "", description: "", priority: "medium" });
     setNewIssueFile(null);
@@ -2145,6 +3022,7 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
 
   function updateSelectedAppeal(updater, message) {
     if (!selected) return;
+<<<<<<< HEAD
     const nextValue = typeof updater === "function" ? updater(selected) : updater;
     if (assignmentLocked && Object.prototype.hasOwnProperty.call(nextValue || {}, "assignedEngineerId")) {
       notify("Engineer assignment is locked after resolution.", "error");
@@ -2158,6 +3036,29 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
           : appeal
       )
     }));
+=======
+    setData((current) => {
+      const target = current.appeals.find((appeal) => appeal.id === selected.id);
+      const patch = typeof updater === "function" ? updater(target) : updater;
+      return withNotification({
+        ...current,
+        appeals: current.appeals.map((appeal) =>
+          appeal.id === selected.id
+            ? { ...appeal, ...patch, updatedAt: new Date().toISOString() }
+            : appeal
+        )
+      }, {
+        type: "appeal_updated",
+        title: "Issue updated",
+        message: message || `${target?.title || "Issue"} was updated by ${user.role}.`,
+        clientId: target?.clientId,
+        actorRole: user.role,
+        actorName: user.name,
+        entityType: "appeal",
+        entityId: selected.id
+      });
+    });
+>>>>>>> 4402920 (Updated Asset management app)
     if (message) notify(message);
   }
 
@@ -2348,15 +3249,20 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
   );
 }
 
-function ServicePage({ data, setData, notify }) {
+function ServicePage({ user, data, setData, notify }) {
   const availableEngineers = (data.engineers || []).filter((engineer) => engineer.status !== "inactive");
+  const [selectedRecordId, setSelectedRecordId] = useState(data.serviceRecords[0]?.id || "");
+  const selectedRecord = data.serviceRecords.find((record) => record.id === selectedRecordId);
+  const selectedRecordAsset = selectedRecord ? data.assets.find((asset) => asset.id === selectedRecord.assetId) : null;
+  const [statusDraft, setStatusDraft] = useState(selectedRecord?.status || "repairing");
   const [form, setForm] = useState({
     clientId: data.assets[0]?.clientId || data.clients[0]?.id || "",
     assetId: data.assets[0]?.id || "",
     serviceType: "Repair",
     technicianName: data.engineers?.find((engineer) => engineer.status !== "inactive")?.name || "",
     description: "",
-    nextServiceDue: "",
+    nextServiceDue: addMonths(today(), 1),
+    nextServiceTerm: "1M",
     status: "repairing"
   });
   const availableAssets = data.assets.filter((asset) => asset.clientId === form.clientId);
@@ -2365,14 +3271,58 @@ function ServicePage({ data, setData, notify }) {
   const completedRecords = data.serviceRecords.filter((record) => ["repaired", "completed"].includes(record.status));
   const dueSoonRecords = data.serviceRecords.filter((record) => record.nextServiceDue && record.nextServiceDue <= "2026-06-30");
 
+  useEffect(() => {
+    setStatusDraft(selectedRecord?.status || "repairing");
+  }, [selectedRecord?.id, selectedRecord?.status]);
+
   function updateForm(field, value) {
     setForm((current) => {
       if (field === "clientId") {
         const nextAssets = data.assets.filter((asset) => asset.clientId === value);
         return { ...current, clientId: value, assetId: nextAssets[0]?.id || "" };
       }
+      if (field === "nextServiceTerm") {
+        return { ...current, nextServiceTerm: value, nextServiceDue: addMonths(today(), monthsForTerm(value, SERVICE_DUE_TERMS)) };
+      }
       return { ...current, [field]: value };
     });
+  }
+
+  function updateSelectedRecordStatus(event) {
+    event.preventDefault();
+    if (!selectedRecord) return;
+    setData((current) => {
+      const asset = current.assets.find((item) => item.id === selectedRecord.assetId);
+      const nextAssetStatus = statusDraft === "repaired" || statusDraft === "completed" ? "repaired" : statusDraft;
+      return withNotification({
+        ...current,
+        assets: current.assets.map((item) =>
+          item.id === selectedRecord.assetId
+            ? {
+                ...item,
+                status: nextAssetStatus,
+                lifecycle: [
+                  ...item.lifecycle,
+                  { id: uid("l"), type: "Service", description: `Service status changed to ${formatStatusLabel(statusDraft)}.`, createdAt: today() }
+                ]
+              }
+            : item
+        ),
+        serviceRecords: current.serviceRecords.map((record) =>
+          record.id === selectedRecord.id ? { ...record, status: statusDraft } : record
+        )
+      }, {
+        type: "service_status_updated",
+        title: "Service status updated",
+        message: `${asset?.name || "Asset"} service status changed to ${formatStatusLabel(statusDraft)}.`,
+        clientId: asset?.clientId,
+        actorRole: "admin",
+        actorName: user.name,
+        entityType: "service",
+        entityId: selectedRecord.id
+      });
+    });
+    notify("Service status updated.");
   }
 
   function submit(event) {
@@ -2404,11 +3354,20 @@ function ServicePage({ data, setData, notify }) {
           ...form,
           serviceDate: today()
         };
-        return {
+        return withNotification({
           ...current,
           assets: updatedAssets,
           serviceRecords: current.serviceRecords.map((record) => record.id === latestRecord.id ? updatedRecord : record)
-        };
+        }, {
+          type: "service_updated",
+          title: "Service updated",
+          message: `${asset?.name || "Asset"} was marked ${formatStatusLabel(form.status).toLowerCase()} by admin.`,
+          clientId: asset?.clientId,
+          actorRole: "admin",
+          actorName: user.name,
+          entityType: "service",
+          entityId: latestRecord.id
+        });
       }
 
       const record = {
@@ -2417,14 +3376,27 @@ function ServicePage({ data, setData, notify }) {
         serviceDate: today(),
         description: form.description || `${asset?.name || "Asset"} marked ${formatStatusLabel(form.status).toLowerCase()}.`
       };
-      return { ...current, assets: updatedAssets, serviceRecords: [record, ...current.serviceRecords] };
+      return withNotification(
+        { ...current, assets: updatedAssets, serviceRecords: [record, ...current.serviceRecords] },
+        {
+          type: "service_created",
+          title: "Service record added",
+          message: `${asset?.name || "Asset"} was marked ${formatStatusLabel(form.status).toLowerCase()} by admin.`,
+          clientId: asset?.clientId,
+          actorRole: "admin",
+          actorName: user.name,
+          entityType: "service",
+          entityId: record.id
+        }
+      );
     });
     setForm((current) => ({
       ...current,
       assetId: data.assets.filter((asset) => asset.clientId === current.clientId)[0]?.id || "",
       technicianName: availableEngineers[0]?.name || "",
       description: "",
-      nextServiceDue: "",
+      nextServiceDue: addMonths(today(), 1),
+      nextServiceTerm: "1M",
       status: "repairing"
     }));
     notify(`${assetName} marked ${formatStatusLabel(form.status).toLowerCase()}.`);
@@ -2468,7 +3440,7 @@ function ServicePage({ data, setData, notify }) {
             {sortedRecords.length > 0 ? sortedRecords.map((record) => {
               const asset = data.assets.find((item) => item.id === record.assetId);
               return (
-                <div key={record.id} className="service-record-card">
+                <button key={record.id} type="button" className={selectedRecordId === record.id ? "service-record-card active selectable" : "service-record-card selectable"} onClick={() => setSelectedRecordId(record.id)}>
                   <div className="service-record-main">
                     <span className={statusClass(record.status)}>{formatStatusLabel(record.status)}</span>
                     <strong>{record.serviceType}</strong>
@@ -2481,11 +3453,34 @@ function ServicePage({ data, setData, notify }) {
                     <span><strong>Technician</strong>{record.technicianName || "Not assigned"}</span>
                     <span><strong>Next due</strong>{record.nextServiceDue || "Not scheduled"}</span>
                   </div>
-                </div>
+                </button>
               );
             }) : <div className="empty-inline">No service records yet.</div>}
           </div>
         </div>
+
+        <div className="service-side-stack">
+        {selectedRecord && (
+          <form className="panel service-form" onSubmit={updateSelectedRecordStatus}>
+            <div className="panel-head">
+              <div>
+                <span className="eyebrow">Edit status only</span>
+                <h2>{selectedRecordAsset?.name || "Service record"}</h2>
+              </div>
+              <span className={statusClass(selectedRecord.status)}>{formatStatusLabel(selectedRecord.status)}</span>
+            </div>
+            <label>
+              Status
+              <select value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)}>
+                <option value="repairing">Repairing</option>
+                <option value="pending">Pending</option>
+                <option value="repaired">Repaired</option>
+                <option value="completed">Completed</option>
+              </select>
+            </label>
+            <button className="primary" type="submit"><Save size={16} /> Update status</button>
+          </form>
+        )}
 
         <form className="panel service-form" onSubmit={submit}>
           <div className="panel-head">
@@ -2533,6 +3528,9 @@ function ServicePage({ data, setData, notify }) {
           </label>
           <label>
             Next service due
+            <select value={form.nextServiceTerm} onChange={(event) => updateForm("nextServiceTerm", event.target.value)}>
+              {SERVICE_DUE_TERMS.map((term) => <option key={term.label} value={term.label}>{term.label}</option>)}
+            </select>
             <input type="date" value={form.nextServiceDue} onChange={(event) => updateForm("nextServiceDue", event.target.value)} />
           </label>
           <label>
@@ -2541,6 +3539,7 @@ function ServicePage({ data, setData, notify }) {
           </label>
           <button className="primary" type="submit"><CheckCircle2 size={16} /> Save service</button>
         </form>
+        </div>
       </div>
     </section>
   );
@@ -2595,9 +3594,12 @@ function InactiveCompanyPage({ clientBrand }) {
   );
 }
 
-function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveCredentialRequest }) {
+function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveCredentialRequest, onChangeAdminPassword, onUpdateAdminAlertEmail, onSendAdminAlertTest }) {
   const clientUsers = data.users.filter((user) => user.role === "client");
+  const adminUser = data.users.find((item) => item.role === "admin");
   const pendingRequests = (data.credentialRequests || []).filter((request) => request.status === "pending");
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [adminAlertEmail, setAdminAlertEmail] = useState(data.settings?.adminAlertEmail || DEFAULT_ADMIN_ALERT_EMAIL);
   const [credentialDrafts, setCredentialDrafts] = useState(() =>
     Object.fromEntries(clientUsers.map((user) => [user.id, { email: user.email, password: "" }]))
   );
@@ -2606,6 +3608,10 @@ function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveC
     setCredentialDrafts(Object.fromEntries(clientUsers.map((user) => [user.id, { email: user.email, password: "" }])));
   }, [data.users]);
 
+  useEffect(() => {
+    setAdminAlertEmail(data.settings?.adminAlertEmail || DEFAULT_ADMIN_ALERT_EMAIL);
+  }, [data.settings?.adminAlertEmail]);
+
   function updateDraft(userId, field, value) {
     setCredentialDrafts((current) => ({
       ...current,
@@ -2613,8 +3619,54 @@ function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveC
     }));
   }
 
+  async function submitPasswordChange(event) {
+    event.preventDefault();
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      notify("New password and confirmation do not match.", "error");
+      return;
+    }
+    const changed = await onChangeAdminPassword(passwordForm.currentPassword, passwordForm.newPassword);
+    if (changed) setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  }
+
   return (
     <section className="page-grid">
+      <div className="panel">
+        <div className="panel-head">
+          <div>
+            <span className="eyebrow">Mail alerts</span>
+            <h2>Admin alert email</h2>
+          </div>
+        </div>
+        <form className="form-grid" onSubmit={(event) => {
+          event.preventDefault();
+          onUpdateAdminAlertEmail(adminAlertEmail);
+        }}>
+          <input type="email" placeholder="admin@example.com" value={adminAlertEmail} onChange={(event) => setAdminAlertEmail(event.target.value)} required />
+          <div className="field-grid">
+            <button className="primary inline-action" type="submit"><Save size={16} /> Save alert email</button>
+            <button className="secondary inline-action" type="button" onClick={() => onSendAdminAlertTest(adminAlertEmail)}><Mail size={16} /> Send test email</button>
+          </div>
+        </form>
+      </div>
+      <div className="panel">
+        <div className="panel-head">
+          <div>
+            <span className="eyebrow">Admin security</span>
+            <h2>Change your password</h2>
+          </div>
+        </div>
+        <PasswordRotationNotice user={adminUser} />
+        <form className="form-grid settings-password-form" onSubmit={submitPasswordChange}>
+          <input type="password" autoComplete="current-password" placeholder="Current password" value={passwordForm.currentPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} required />
+          <div className="field-grid">
+            <input type="password" autoComplete="new-password" placeholder="New password" value={passwordForm.newPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))} required />
+            <input type="password" autoComplete="new-password" placeholder="Confirm new password" value={passwordForm.confirmPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))} required />
+          </div>
+          <PasswordPolicyHint password={passwordForm.newPassword} />
+          <button className="primary inline-action" type="submit"><Save size={16} /> Update password</button>
+        </form>
+      </div>
       <div className="panel">
         <div className="panel-head">
           <div>
@@ -2635,6 +3687,8 @@ function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveC
                 <input type="email" placeholder="Login email" value={draft.email} onChange={(event) => updateDraft(user.id, "email", event.target.value)} />
                 <input type="password" placeholder="New password" value={draft.password} onChange={(event) => updateDraft(user.id, "password", event.target.value)} />
                 <button className="primary" type="button" onClick={() => onUpdateClientCredentials(user.clientId, draft.email, draft.password)}>Save</button>
+                <PasswordRotationNotice user={user} />
+                {draft.password && <PasswordPolicyHint password={draft.password} />}
               </div>
             );
           })}
@@ -2701,6 +3755,8 @@ function ClientSettingsPage({ user, data, notify, onSubmitCredentialRequest }) {
           <form className="form-grid" onSubmit={submit}>
             <input type="email" placeholder="Requested login email" value={form.requestedEmail} onChange={(event) => setForm((current) => ({ ...current, requestedEmail: event.target.value }))} />
             <input type="password" placeholder="Requested new password" value={form.requestedPassword} onChange={(event) => setForm((current) => ({ ...current, requestedPassword: event.target.value }))} />
+            <PasswordRotationNotice user={user} />
+            {form.requestedPassword && <PasswordPolicyHint password={form.requestedPassword} />}
             <textarea placeholder="Reason for change" value={form.note} onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))} />
             <button className="primary" type="submit">Send request</button>
           </form>
@@ -2719,12 +3775,25 @@ export default function App() {
   const [pendingSync, setPendingSync] = useState(Boolean(loadPendingState()));
   const [notice, setNotice] = useState(null);
   const [showEngineerModal, setShowEngineerModal] = useState(false);
+  const [theme, setTheme] = useState(loadStoredTheme);
+  const seenNotificationIds = useRef({ initialized: false, ids: new Set() });
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     let cancelled = false;
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
-      setApiStatus("offline");
+      checkApiHealth()
+        .then(() => {
+          if (!cancelled) setApiStatus("connected");
+        })
+        .catch(() => {
+          if (!cancelled) setApiStatus("offline");
+        });
       return () => {
         cancelled = true;
       };
@@ -2746,7 +3815,11 @@ export default function App() {
         })
         .catch((error) => {
           if (cancelled) return;
+<<<<<<< HEAD
           setApiStatus(isConflictError(error) ? "conflict" : "offline");
+=======
+          setApiStatus(error?.isApiError ? "connected" : "offline");
+>>>>>>> 4402920 (Updated Asset management app)
           setPendingSync(true);
           if (isConflictError(error)) {
             notify(error.message || "Sync conflict. Resolve duplicate records and save again.", "error");
@@ -2764,9 +3837,9 @@ export default function App() {
         saveState(serverState);
         setApiStatus("connected");
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
-        setApiStatus("offline");
+        setApiStatus(error?.isApiError ? "connected" : "offline");
       });
 
     return () => {
@@ -2807,10 +3880,82 @@ export default function App() {
   }, [user, view]);
 
   useEffect(() => {
+    if (!user) {
+      seenNotificationIds.current = { initialized: false, ids: new Set() };
+      return;
+    }
+    const visibleNotifications = scopedNotifications(data.notifications || [], user);
+    const currentIds = seenNotificationIds.current.ids;
+    const freshNotifications = visibleNotifications.filter((notification) => !currentIds.has(notification.id));
+    if (seenNotificationIds.current.initialized) {
+      freshNotifications
+        .filter((notification) => notification.actorName !== user.name)
+        .reverse()
+        .forEach((notification) => {
+          toast(notification.title, {
+            description: notification.message
+          });
+        });
+    }
+    visibleNotifications.forEach((notification) => currentIds.add(notification.id));
+    seenNotificationIds.current.initialized = true;
+  }, [data.notifications, user]);
+
+  useEffect(() => {
+    if (!user || !localStorage.getItem(TOKEN_KEY)) return undefined;
+    const timer = window.setInterval(() => {
+      if (!navigator.onLine || loadPendingState()) return;
+      apiRequest("/state")
+        .then((serverState) => {
+          setDataState(serverState);
+          saveState(serverState);
+          setApiStatus("connected");
+        })
+        .catch((error) => setApiStatus(error?.isApiError ? "connected" : "offline"));
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [user]);
+
+  useEffect(() => {
     if (!notice) return undefined;
     const timer = window.setTimeout(() => setNotice(null), 2600);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    if (!user || user.role !== "admin") return;
+    const todayDate = new Date(`${today()}T00:00:00`);
+    const expiringClients = (data.clients || []).filter((client) => {
+      if (!client.amcEndDate || client.amcRenewalNoticeSentAt) return false;
+      const endDate = new Date(`${client.amcEndDate}T00:00:00`);
+      if (Number.isNaN(endDate.getTime())) return false;
+      const daysLeft = Math.ceil((endDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+      return daysLeft >= 0 && daysLeft <= 30;
+    });
+    if (expiringClients.length === 0) return;
+    setData((current) => {
+      let nextState = current;
+      for (const client of expiringClients) {
+        nextState = withNotification({
+          ...nextState,
+          clients: nextState.clients.map((item) =>
+            item.id === client.id ? { ...item, amcRenewalNoticeSentAt: new Date().toISOString() } : item
+          )
+        }, {
+          type: "amc_expiring",
+          title: "AMC renewal due",
+          message: `${client.companyName} AMC ends on ${client.amcEndDate}. Please renew the contract.`,
+          clientId: client.id,
+          actorRole: "system",
+          actorName: "System",
+          entityType: "amc",
+          entityId: client.id,
+          tone: "warning"
+        });
+      }
+      return nextState;
+    });
+  }, [data.clients, user]);
 
   async function syncPendingState() {
     const pending = loadPendingState();
@@ -2827,7 +3972,11 @@ export default function App() {
       setApiStatus("connected");
       return true;
     } catch (error) {
+<<<<<<< HEAD
       setApiStatus(isConflictError(error) ? "conflict" : "offline");
+=======
+      setApiStatus(error?.isApiError ? "connected" : "offline");
+>>>>>>> 4402920 (Updated Asset management app)
       setPendingSync(true);
       if (isConflictError(error)) {
         notify(error.message || "Sync conflict. Resolve duplicate records and save again.", "error");
@@ -2858,10 +4007,14 @@ export default function App() {
     } catch (error) {
       queuePendingState(nextState);
       setPendingSync(true);
+<<<<<<< HEAD
       setApiStatus(isConflictError(error) ? "conflict" : "offline");
       if (isConflictError(error)) {
         notify(error.message || "Sync conflict. Resolve duplicate records and save again.", "error");
       }
+=======
+      setApiStatus(error?.isApiError ? "connected" : "offline");
+>>>>>>> 4402920 (Updated Asset management app)
     }
   }
 
@@ -2881,6 +4034,32 @@ export default function App() {
 
   function notify(message, tone = "success") {
     setNotice({ id: Date.now(), message, tone });
+    const toastMethod = tone === "error" ? toast.error : tone === "warning" ? toast.warning : toast.success;
+    toastMethod(message);
+  }
+
+  function markNotificationsRead() {
+    if (!user) return;
+    setData((current) => ({
+      ...current,
+      notifications: (current.notifications || []).map((notification) => {
+        const isVisible = user.role === "admin" || notification.clientId === user.clientId;
+        if (!isVisible || (notification.readBy || []).includes(user.id)) return notification;
+        return { ...notification, readBy: [...(notification.readBy || []), user.id] };
+      })
+    }));
+    notify("Notifications marked as read.");
+  }
+
+  function clearNotifications() {
+    if (!user) return;
+    setData((current) => ({
+      ...current,
+      notifications: (current.notifications || []).filter((notification) =>
+        user.role === "admin" ? false : notification.clientId !== user.clientId
+      )
+    }));
+    notify("Notifications cleared.");
   }
 
   function createEngineer(form) {
@@ -2910,6 +4089,49 @@ export default function App() {
     notify(`Engineer marked ${formatStatusLabel(status).toLowerCase()}.`);
   }
 
+  function updateAdminAlertEmail(email) {
+    const nextEmail = email.trim();
+    if (!isValidEmail(nextEmail)) {
+      notify("Enter a valid admin alert email address.", "error");
+      return;
+    }
+    setData((current) => ({
+      ...current,
+      settings: {
+        ...(current.settings || {}),
+        adminAlertEmail: nextEmail
+      }
+    }));
+    notify("Admin alert email updated.");
+  }
+
+  async function sendAdminAlertTest(email) {
+    const nextEmail = email.trim();
+    if (!isValidEmail(nextEmail)) {
+      notify("Enter a valid admin alert email address.", "error");
+      return;
+    }
+    try {
+      const result = await apiRequest("/email/admin-alert/test", {
+        method: "POST",
+        body: JSON.stringify({ email: nextEmail })
+      });
+      if (result.result?.sent > 0) {
+        notify(`Test email sent to ${nextEmail}.`);
+      } else {
+        notify("Test email was not sent. Check SMTP settings.", "warning");
+      }
+    } catch (error) {
+      if (error?.status === 404) {
+        notify("Email test is not available on the running backend. Restart the backend and try again.", "error");
+      } else if (error?.status === 502) {
+        notify(`Unable to send test email. ${error.detail ? `SMTP error: ${error.detail}.` : "Check SMTP settings."}`, "error");
+      } else {
+        notify(friendlyErrorMessage(error), "error");
+      }
+    }
+  }
+
   async function updateClientCredentials(clientId, nextEmail, nextPassword) {
     if (!isValidEmail(nextEmail)) {
       notify("Enter a valid login email address.", "error");
@@ -2919,8 +4141,8 @@ export default function App() {
       notify("Password must be at least 8 characters.", "error");
       return;
     }
-    if (!localStorage.getItem(TOKEN_KEY) || !navigator.onLine) {
-      notify("Connect to the API before changing client login credentials.", "error");
+    if (!localStorage.getItem(TOKEN_KEY)) {
+      notify("Sign in again before changing client login credentials.", "error");
       return;
     }
 
@@ -2929,14 +4151,65 @@ export default function App() {
         method: "PUT",
         body: JSON.stringify({ email: nextEmail.trim(), password: nextPassword || "" })
       });
-      setDataState(result.state);
-      saveState(result.state);
+      const nextState = withNotification(result.state, {
+        type: "credentials_updated",
+        title: "Client login updated",
+        message: "Client login credentials were updated by admin.",
+        clientId,
+        actorRole: "admin",
+        actorName: user.name,
+        entityType: "credentials",
+        entityId: clientId
+      });
+      await persistState(nextState);
+      setDataState(nextState);
+      saveState(nextState);
       setApiStatus("connected");
       clearPendingState();
       setPendingSync(false);
       notify("Client login credentials updated.");
     } catch (error) {
-      notify(error.message || "Unable to update client credentials.", "error");
+      notify(friendlyErrorMessage(error), "error");
+    }
+  }
+
+  async function changeAdminPassword(currentPassword, newPassword) {
+    if (newPassword.length < 8) {
+      notify("Password must be at least 8 characters.", "error");
+      return false;
+    }
+    if (!localStorage.getItem(TOKEN_KEY)) {
+      notify("Sign in again before changing your password.", "error");
+      return false;
+    }
+
+    try {
+      const result = await apiRequest("/users/me/password", {
+        method: "PUT",
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const nextState = withNotification(result.state, {
+        type: "admin_password_changed",
+        title: "Admin password changed",
+        message: `${result.user.name || "Admin"} changed their password.`,
+        actorRole: "admin",
+        actorName: result.user.name || user.name,
+        entityType: "security",
+        entityId: result.user.id
+      });
+      await persistState(nextState);
+      setDataState(nextState);
+      saveState(nextState);
+      saveStoredUser(result.user);
+      setUser(result.user);
+      setApiStatus("connected");
+      clearPendingState();
+      setPendingSync(false);
+      notify("Admin password updated.");
+      return true;
+    } catch (error) {
+      notify(error?.status === 401 ? "Current password is incorrect." : friendlyErrorMessage(error), "error");
+      return false;
     }
   }
 
@@ -2949,23 +4222,36 @@ export default function App() {
       notify("Requested password must be at least 8 characters.", "error");
       return;
     }
-    setData((current) => ({
-      ...current,
-      credentialRequests: [
-        {
-          id: uid("cred"),
-          clientId: user.clientId,
-          requestedBy: user.id,
-          requestedEmail: form.requestedEmail.trim(),
-          requestedPassword: form.requestedPassword,
-          note: form.note.trim(),
-          status: "pending",
-          createdAt: new Date().toISOString(),
-          resolvedAt: null
-        },
-        ...(current.credentialRequests || [])
-      ]
-    }));
+    setData((current) => {
+      const request = {
+        id: uid("cred"),
+        clientId: user.clientId,
+        requestedBy: user.id,
+        requestedEmail: form.requestedEmail.trim(),
+        requestedPassword: form.requestedPassword,
+        note: form.note.trim(),
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        resolvedAt: null
+      };
+      return withNotification({
+        ...current,
+        credentialRequests: [
+          request,
+          ...(current.credentialRequests || [])
+        ]
+      }, {
+        type: "credential_request",
+        title: "Credential change requested",
+        message: `${user.name} requested a login credential change.`,
+        clientId: user.clientId,
+        actorRole: "client",
+        actorName: user.name,
+        entityType: "credentials",
+        entityId: request.id,
+        tone: "warning"
+      });
+    });
     notify("Credential change request sent.");
   }
 
@@ -2987,28 +4273,47 @@ export default function App() {
           password: request.requestedPassword || ""
         })
       }).catch((error) => {
-        notify(error.message || "Unable to approve credential request.", "error");
+        notify(friendlyErrorMessage(error), "error");
         return null;
       });
 
       if (!approved) return;
 
-      const nextState = {
+      const nextState = withNotification({
         ...approved.state,
         credentialRequests: (approved.state.credentialRequests || []).map((item) =>
           item.id === requestId ? { ...item, status, resolvedAt: new Date().toISOString() } : item
         )
-      };
+      }, {
+        type: "credential_request_resolved",
+        title: "Credential request approved",
+        message: "Admin approved the credential change request.",
+        clientId: request.clientId,
+        actorRole: "admin",
+        actorName: user.name,
+        entityType: "credentials",
+        entityId: requestId
+      });
       setData(nextState);
       notify(`Credential request ${status}.`);
       return;
     }
 
-    setData((current) => ({
+    setData((current) => withNotification({
       ...current,
       credentialRequests: current.credentialRequests.map((item) =>
         item.id === requestId ? { ...item, status, resolvedAt: new Date().toISOString() } : item
       )
+    }, {
+      type: "credential_request_resolved",
+      title: `Credential request ${status}`,
+      message: `Admin ${status} the credential change request.`,
+      clientId: request.clientId,
+      actorRole: "admin",
+      actorName: user.name,
+      entityType: "credentials",
+      entityId: requestId,
+      tone: status === "rejected" ? "warning" : "info"
     }));
     notify(`Credential request ${status}.`);
   }
@@ -3035,7 +4340,8 @@ export default function App() {
       return true;
     } catch (error) {
       if (error?.isApiError) {
-        return error.message || "Unable to sign in.";
+        setApiStatus("connected");
+        return error.status === 401 ? "Invalid email or password." : friendlyErrorMessage(error);
       }
       const nextUser = data.users.find(
         (item) => item.email.toLowerCase() === email.toLowerCase() && item.password === password
@@ -3066,11 +4372,30 @@ export default function App() {
     if (!user || user.role !== "client") return null;
     return data.clients.find((client) => client.id === user.clientId) || null;
   }, [data.clients, user]);
+  const visibleNotifications = useMemo(() => {
+    if (!user) return [];
+    return scopedNotifications(data.notifications || [], user)
+      .sort((first, second) => new Date(second.createdAt) - new Date(first.createdAt));
+  }, [data.notifications, user]);
+  const notificationUnreadCount = useMemo(() => unreadNotificationCount(data.notifications || [], user), [data.notifications, user]);
 
   if (!user) return <LoginScreen onLogin={login} />;
   if (user.role === "client" && clientBrand?.status === "inactive") {
     return (
-      <Shell user={user} clientBrand={clientBrand} view={view} setView={setView} notice={notice} headerAction={null} onLogout={() => {
+      <Shell
+        user={user}
+        clientBrand={clientBrand}
+        view={view}
+        setView={setView}
+        notice={notice}
+        theme={theme}
+        onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+        headerAction={null}
+        notifications={visibleNotifications}
+        unreadCount={notificationUnreadCount}
+        onMarkNotificationsRead={markNotificationsRead}
+        onClearNotifications={clearNotifications}
+        onLogout={() => {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_KEY);
         localStorage.removeItem(VIEW_KEY);
@@ -3089,11 +4414,22 @@ export default function App() {
       view={view}
       setView={setView}
       notice={notice}
+<<<<<<< HEAD
       headerAction={user.role === "admin" && view === "assets" ? (
         <button className="secondary" type="button" onClick={() => setShowEngineerModal(true)}>
           <Plus size={16} /> Add engineer
         </button>
       ) : null}
+=======
+      apiStatus={apiStatus}
+      theme={theme}
+      onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+      notifications={visibleNotifications}
+      unreadCount={notificationUnreadCount}
+      onMarkNotificationsRead={markNotificationsRead}
+      onClearNotifications={clearNotifications}
+      headerAction={null}
+>>>>>>> 4402920 (Updated Asset management app)
       onLogout={() => {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
@@ -3104,21 +4440,26 @@ export default function App() {
     >
       {(apiStatus === "offline" || apiStatus === "conflict") && (
         <div className="api-banner">
+<<<<<<< HEAD
           {apiStatus === "conflict"
             ? "Sync blocked: duplicate or conflicting data was detected. Fix the conflicting record and save again."
             : pendingSync
               ? "Offline mode: changes are queued and will sync when the API is available."
               : "Backend is offline. You can keep viewing cached data."}
           {pendingSync && apiStatus !== "conflict" && <button type="button" onClick={syncPendingState}>Retry sync</button>}
+=======
+          {pendingSync ? "Connection issue: changes are queued and will sync when service is available." : "Something went wrong. You can keep viewing cached data."}
+          {pendingSync && <button type="button" onClick={syncPendingState}>Retry sync</button>}
+>>>>>>> 4402920 (Updated Asset management app)
         </div>
       )}
       {view === "dashboard" && <Dashboard user={user} data={data} scopedAssets={scopedAssets} scopedAppeals={scopedAppeals} clientBrand={clientBrand} setData={setData} />}
-      {view === "companies" && user.role === "admin" && <CompaniesPage data={data} setData={setData} notify={notify} />}
-      {view === "assets" && <AssetsPage user={user} data={data} scopedAssets={scopedAssets} setData={setData} notify={notify} />}
+      {view === "companies" && user.role === "admin" && <CompaniesPage user={user} data={data} setData={setData} notify={notify} />}
+      {view === "assets" && <AssetsPage user={user} data={data} scopedAssets={scopedAssets} setData={setData} notify={notify} onAddEngineer={() => setShowEngineerModal(true)} />}
       {view === "appeals" && <AppealsPage user={user} data={data} scopedAppeals={scopedAppeals} scopedAssets={scopedAssets} setData={setData} notify={notify} />}
-      {view === "service" && user.role === "admin" && <ServicePage data={data} setData={setData} notify={notify} />}
+      {view === "service" && user.role === "admin" && <ServicePage user={user} data={data} setData={setData} notify={notify} />}
       {view === "service" && user.role === "client" && <ClientServiceHistoryPage scopedAssets={scopedAssets} data={data} />}
-      {view === "settings" && user.role === "admin" && <AdminSettingsPage data={data} notify={notify} onUpdateClientCredentials={updateClientCredentials} onResolveCredentialRequest={resolveCredentialRequest} />}
+      {view === "settings" && user.role === "admin" && <AdminSettingsPage data={data} notify={notify} onUpdateClientCredentials={updateClientCredentials} onResolveCredentialRequest={resolveCredentialRequest} onChangeAdminPassword={changeAdminPassword} onUpdateAdminAlertEmail={updateAdminAlertEmail} onSendAdminAlertTest={sendAdminAlertTest} />}
       {view === "settings" && user.role === "client" && <ClientSettingsPage user={user} data={data} notify={notify} onSubmitCredentialRequest={submitCredentialRequest} />}
       {showEngineerModal && user.role === "admin" && <EngineerModal engineers={data.engineers || []} onClose={() => setShowEngineerModal(false)} onCreate={createEngineer} onUpdateStatus={updateEngineerStatus} />}
     </Shell>

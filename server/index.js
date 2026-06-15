@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import helmet from "helmet";
 import jwt from "jsonwebtoken";
 import multer from "multer";
+import nodemailer from "nodemailer";
 import { query } from "./db.js";
 import {
   createUploadedFile,
@@ -33,6 +34,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadRoot = path.resolve(__dirname, "..", process.env.UPLOAD_DIR || "uploads");
 const distRoot = path.resolve(__dirname, "..", "dist");
+const emailLogoPath = path.resolve(__dirname, "..", "public", "email-logo.png");
+const mailFrom = process.env.MAIL_FROM || process.env.SMTP_USER || "HAAK Asset Management <no-reply@haak.local>";
+const emailLogoCid = "haak-email-logo@haak-assets";
 
 fs.mkdirSync(uploadRoot, { recursive: true });
 
@@ -112,10 +116,14 @@ function publicUser(user) {
 function publicState(state) {
   return {
     ...state,
+    settings: {
+      adminAlertEmail: state.settings?.adminAlertEmail || "huzefarampurawala9@gmail.com"
+    },
     users: state.users.map(publicUser)
   };
 }
 
+<<<<<<< HEAD
 function duplicateValues(values) {
   const seen = new Set();
   const duplicates = new Set();
@@ -139,6 +147,495 @@ function sendApiError(response, error) {
   }
   console.error(error);
   return response.status(500).json({ error: "Server error. Please try again." });
+=======
+function isEmailEnabled() {
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+let mailTransporter = null;
+
+function getMailTransporter() {
+  if (!isEmailEnabled()) return null;
+  if (!mailTransporter) {
+    mailTransporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: String(process.env.SMTP_SECURE || "false") === "true",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    });
+  }
+  return mailTransporter;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function notificationToneColor(tone = "info") {
+  if (tone === "warning") return "#f59e0b";
+  if (tone === "error" || tone === "danger") return "#ef1f24";
+  if (tone === "success") return "#16a34a";
+  return "#ef1f24";
+}
+
+function buildNotificationEmail(notification, appUrl) {
+  const accent = notificationToneColor(notification.tone);
+  const safeTitle = escapeHtml(notification.title);
+  const safeMessage = escapeHtml(notification.message);
+  const company = escapeHtml(notification.companyName || "HAAK Asset Management");
+  const actor = escapeHtml(notification.actorName || notification.actorRole || "System");
+  const entityType = escapeHtml(notification.entityType || "Activity");
+  const createdAt = escapeHtml(new Date(notification.createdAt || Date.now()).toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata"
+  }));
+  const cta = appUrl
+    ? `<tr>
+        <td style="padding: 8px 32px 34px;">
+          <a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#ef1f24;color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;padding:13px 20px;border-radius:6px;">Open Asset Portal</a>
+        </td>
+      </tr>`
+    : "";
+
+  return `
+<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f3f5f8;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f5f8;margin:0;padding:28px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 16px 42px rgba(2,11,24,0.12);">
+            <tr>
+              <td style="background:#020b18;padding:28px 32px 24px;border-bottom:4px solid #ef1f24;">
+                <img src="cid:${emailLogoCid}" alt="HAAK INFOTECH" width="360" style="display:block;width:100%;max-width:360px;height:auto;border:0;outline:none;text-decoration:none;">
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:30px 32px 10px;">
+                <div style="display:inline-block;background:${accent};color:#ffffff;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:6px 10px;border-radius:999px;">${escapeHtml(notification.tone || "info")}</div>
+                <h1 style="margin:16px 0 10px;font-size:26px;line-height:1.22;color:#07111f;">${safeTitle}</h1>
+                <p style="margin:0;font-size:16px;line-height:1.65;color:#475569;">${safeMessage}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 32px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e7eb;border-radius:10px;background:#f8fafc;">
+                  <tr>
+                    <td style="padding:16px;border-bottom:1px solid #e5e7eb;">
+                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Company</div>
+                      <div style="font-size:15px;font-weight:800;color:#111827;margin-top:4px;">${company}</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px;border-bottom:1px solid #e5e7eb;">
+                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Triggered by</div>
+                      <div style="font-size:15px;font-weight:800;color:#111827;margin-top:4px;">${actor}</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px;border-bottom:1px solid #e5e7eb;">
+                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Record type</div>
+                      <div style="font-size:15px;font-weight:800;color:#111827;margin-top:4px;">${entityType}</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px;">
+                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Time</div>
+                      <div style="font-size:15px;font-weight:800;color:#111827;margin-top:4px;">${createdAt}</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            ${cta}
+            <tr>
+              <td style="padding:18px 32px;background:#07111f;color:#94a3b8;font-size:12px;line-height:1.6;">
+                <strong style="color:#ffffff;">HAAK INFOTECH</strong><br>
+                Innovate | Build | Empower<br>
+                This is an automated notification from HAAK Asset Management.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+function notificationRecipients(notification, state) {
+  const adminAlertEmail = state.settings?.adminAlertEmail || "huzefarampurawala9@gmail.com";
+  const admins = adminAlertEmail
+    ? [{ id: "admin-alert", name: "Admin", email: adminAlertEmail }]
+    : state.users.filter((user) => user.role === "admin" && validateEmail(user.email));
+  const clientUsers = notification.clientId
+    ? state.users.filter((user) => user.role === "client" && user.clientId === notification.clientId && validateEmail(user.email))
+    : [];
+  const recipients = notification.actorRole === "client"
+    ? admins
+    : notification.actorRole === "admin"
+      ? clientUsers
+      : [...admins, ...clientUsers];
+  return [...new Map(recipients.map((user) => [user.email.toLowerCase(), user])).values()];
+}
+
+function getAppUrl() {
+  if (process.env.PUBLIC_APP_URL) return process.env.PUBLIC_APP_URL;
+  if (process.env.CORS_ORIGIN) {
+    const origins = process.env.CORS_ORIGIN.split(",");
+    if (origins.length > 0) return origins[0].trim();
+  }
+  return "http://localhost:5174";
+}
+
+function buildWelcomeEmailHtml(client, user, plainPassword, appUrl) {
+  const safeName = escapeHtml(client?.contactPerson || user.name || "Client");
+  const safeCompanyName = escapeHtml(client?.companyName || "Client Company");
+  const safeEmail = escapeHtml(user.email);
+  const safePassword = escapeHtml(plainPassword);
+  const safeUrl = escapeHtml(appUrl);
+
+  return `
+<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f3f5f8;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f5f8;margin:0;padding:28px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 16px 42px rgba(2,11,24,0.12);">
+            <tr>
+              <td style="background:#020b18;padding:28px 32px 24px;border-bottom:4px solid #ef1f24;">
+                <img src="cid:${emailLogoCid}" alt="HAAK INFOTECH" width="360" style="display:block;width:100%;max-width:360px;height:auto;border:0;outline:none;text-decoration:none;">
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:30px 32px 10px;">
+                <div style="display:inline-block;background:#16a34a;color:#ffffff;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:6px 10px;border-radius:999px;">Welcome</div>
+                <h1 style="margin:16px 0 10px;font-size:26px;line-height:1.22;color:#07111f;">Welcome to HAAK Asset Management</h1>
+                <p style="margin:0;font-size:16px;line-height:1.65;color:#475569;">Hello <strong>${safeName}</strong>,<br><br>Your company <strong>"${safeCompanyName}"</strong> has been registered in the HAAK Asset Management portal. You can now access your assets, track issues, and view service history.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 32px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e7eb;border-radius:10px;background:#f8fafc;">
+                  <tr>
+                    <td style="padding:16px;border-bottom:1px solid #e5e7eb;">
+                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Portal Link</div>
+                      <div style="font-size:15px;font-weight:800;color:#2563eb;margin-top:4px;"><a href="${safeUrl}" style="color:#2563eb;text-decoration:none;">${safeUrl}</a></div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px;border-bottom:1px solid #e5e7eb;">
+                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Username (Email)</div>
+                      <div style="font-size:15px;font-weight:800;color:#111827;margin-top:4px;"><code>${safeEmail}</code></div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px;">
+                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Password</div>
+                      <div style="font-size:15px;font-weight:800;color:#111827;margin-top:4px;"><code>${safePassword}</code></div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 32px 34px;">
+                <a href="${safeUrl}" style="display:inline-block;background:#ef1f24;color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;padding:13px 20px;border-radius:6px;">Log In to Portal</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 32px;background:#07111f;color:#94a3b8;font-size:12px;line-height:1.6;">
+                <strong style="color:#ffffff;">HAAK INFOTECH</strong><br>
+                Innovate | Build | Empower<br>
+                Please change your password immediately after logging in for the first time.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+function buildCredentialsUpdatedEmailHtml(client, user, newEmail, newPassword, appUrl) {
+  const safeName = escapeHtml(client?.contactPerson || user.name || "Client");
+  const safeEmail = escapeHtml(newEmail);
+  const safePassword = newPassword ? escapeHtml(newPassword) : "";
+  const safeUrl = escapeHtml(appUrl);
+
+  return `
+<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f3f5f8;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f5f8;margin:0;padding:28px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 16px 42px rgba(2,11,24,0.12);">
+            <tr>
+              <td style="background:#020b18;padding:28px 32px 24px;border-bottom:4px solid #ef1f24;">
+                <img src="cid:${emailLogoCid}" alt="HAAK INFOTECH" width="360" style="display:block;width:100%;max-width:360px;height:auto;border:0;outline:none;text-decoration:none;">
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:30px 32px 10px;">
+                <div style="display:inline-block;background:#f59e0b;color:#ffffff;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:6px 10px;border-radius:999px;">Account Update</div>
+                <h1 style="margin:16px 0 10px;font-size:26px;line-height:1.22;color:#07111f;">Login Credentials Updated</h1>
+                <p style="margin:0;font-size:16px;line-height:1.65;color:#475569;">Hello <strong>${safeName}</strong>,<br><br>Your login credentials for the HAAK Asset Management portal have been updated by the administrator. Please find your updated login details below.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 32px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e7eb;border-radius:10px;background:#f8fafc;">
+                  <tr>
+                    <td style="padding:16px;border-bottom:1px solid #e5e7eb;">
+                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Portal Link</div>
+                      <div style="font-size:15px;font-weight:800;color:#2563eb;margin-top:4px;"><a href="${safeUrl}" style="color:#2563eb;text-decoration:none;">${safeUrl}</a></div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:16px;${safePassword ? "border-bottom:1px solid #e5e7eb;" : ""}">
+                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Username (Email)</div>
+                      <div style="font-size:15px;font-weight:800;color:#111827;margin-top:4px;"><code>${safeEmail}</code></div>
+                    </td>
+                  </tr>
+                  ${safePassword ? `
+                  <tr>
+                    <td style="padding:16px;">
+                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">New Password</div>
+                      <div style="font-size:15px;font-weight:800;color:#111827;margin-top:4px;"><code>${safePassword}</code></div>
+                    </td>
+                  </tr>
+                  ` : `
+                  <tr>
+                    <td style="padding:16px;">
+                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Password</div>
+                      <div style="font-size:15px;font-style:italic;color:#64748b;margin-top:4px;">Unchanged</div>
+                    </td>
+                  </tr>
+                  `}
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 32px 34px;">
+                <a href="${safeUrl}" style="display:inline-block;background:#ef1f24;color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;padding:13px 20px;border-radius:6px;">Log In to Portal</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 32px;background:#07111f;color:#94a3b8;font-size:12px;line-height:1.6;">
+                <strong style="color:#ffffff;">HAAK INFOTECH</strong><br>
+                Innovate | Build | Empower<br>
+                If you did not request this update, please contact the administrator immediately.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+async function sendClientWelcomeEmail(client, user, plainPassword) {
+  const transporter = getMailTransporter();
+  if (!transporter) {
+    console.warn("Welcome email skipped because SMTP is not configured.");
+    return { sent: 0, failed: 0, skipped: true };
+  }
+
+  const appUrl = getAppUrl();
+  const subject = `Welcome to HAAK Asset Management - Account Created`;
+  const text = [
+    `Hello ${client?.contactPerson || user.name || "Client"},`,
+    "",
+    `Your company "${client?.companyName || "Client Company"}" has been registered in the HAAK Asset Management portal.`,
+    "",
+    `You can log in to your dashboard using the following credentials:`,
+    `Login URL: ${appUrl}`,
+    `Username / Email: ${user.email}`,
+    `Password: ${plainPassword}`,
+    "",
+    "Please log in and change your password immediately to secure your account.",
+    "",
+    "Best regards,",
+    "HAAK Asset Management Team"
+  ].join("\n");
+
+  const html = buildWelcomeEmailHtml(client, user, plainPassword, appUrl);
+
+  const recipients = new Set([user.email.toLowerCase()]);
+  if (client?.email) {
+    recipients.add(client.email.toLowerCase());
+  }
+
+  const tasks = [];
+  for (const recipient of recipients) {
+    tasks.push(
+      transporter.sendMail({
+        from: mailFrom,
+        to: recipient,
+        subject,
+        text,
+        html,
+        attachments: fs.existsSync(emailLogoPath)
+          ? [{ filename: "haak-infotech.png", path: emailLogoPath, cid: emailLogoCid }]
+          : []
+      })
+    );
+  }
+
+  const results = await Promise.allSettled(tasks);
+  const failed = results.filter((r) => r.status === "rejected");
+  if (failed.length > 0) {
+    console.warn(`Welcome email failed for ${failed.length} recipient(s).`);
+    failed.forEach((result) => console.warn(result.reason?.message || result.reason));
+  }
+  return { sent: results.length - failed.length, failed: failed.length, skipped: false };
+}
+
+async function sendClientCredentialsUpdatedEmail(client, user, newEmail, newPassword) {
+  const transporter = getMailTransporter();
+  if (!transporter) return;
+
+  const appUrl = getAppUrl();
+  const subject = `HAAK Asset Management - Account Login Updated`;
+  const text = [
+    `Hello ${client?.contactPerson || user?.name || "Client"},`,
+    "",
+    `Your login credentials for the HAAK Asset Management portal have been updated by the administrator.`,
+    "",
+    `Here are your updated login details:`,
+    `Login URL: ${appUrl}`,
+    `Username / Email: ${newEmail}`,
+    newPassword ? `New Password: ${newPassword}` : "Password: (unchanged)",
+    "",
+    "If you did not request this update, please contact the administrator immediately.",
+    "",
+    "Best regards,",
+    "HAAK Asset Management Team"
+  ].join("\n");
+
+  const html = buildCredentialsUpdatedEmailHtml(client, user, newEmail, newPassword, appUrl);
+
+  const recipients = new Set([newEmail.toLowerCase()]);
+  if (user?.email) {
+    recipients.add(user.email.toLowerCase());
+  }
+  if (client?.email) {
+    recipients.add(client.email.toLowerCase());
+  }
+
+  const tasks = [];
+  for (const recipient of recipients) {
+    tasks.push(
+      transporter.sendMail({
+        from: mailFrom,
+        to: recipient,
+        subject,
+        text,
+        html,
+        attachments: fs.existsSync(emailLogoPath)
+          ? [{ filename: "haak-infotech.png", path: emailLogoPath, cid: emailLogoCid }]
+          : []
+      })
+    );
+  }
+
+  const results = await Promise.allSettled(tasks);
+  const failed = results.filter((r) => r.status === "rejected");
+  if (failed.length > 0) {
+    console.warn(`Credential update email failed for ${failed.length} recipient(s).`);
+  }
+}
+
+async function emailNewNotifications(newNotifications, state) {
+  const transporter = getMailTransporter();
+  if (!transporter || newNotifications.length === 0) {
+    if (!transporter && newNotifications.length > 0) console.warn("Notification email skipped because SMTP is not configured.");
+    return { sent: 0, failed: 0, skipped: !transporter };
+  }
+
+  const appUrl = getAppUrl();
+  const tasks = [];
+  for (const notification of newNotifications) {
+    const recipients = notificationRecipients(notification, state);
+    for (const recipient of recipients) {
+      tasks.push(transporter.sendMail({
+        from: mailFrom,
+        to: recipient.email,
+        subject: `[HAAK Assets] ${notification.title}`,
+        text: [
+          notification.title,
+          "",
+          notification.message,
+          notification.companyName ? `Company: ${notification.companyName}` : "",
+          notification.actorRole ? `By: ${notification.actorName || notification.actorRole}` : "",
+          appUrl ? `Open: ${appUrl}` : ""
+        ].filter(Boolean).join("\n"),
+        html: buildNotificationEmail(notification, appUrl),
+        attachments: fs.existsSync(emailLogoPath)
+          ? [{ filename: "haak-infotech.png", path: emailLogoPath, cid: emailLogoCid }]
+          : []
+      }));
+    }
+  }
+
+  const results = await Promise.allSettled(tasks);
+  const failed = results.filter((result) => result.status === "rejected");
+  if (failed.length > 0) {
+    console.warn(`Notification email failed for ${failed.length} recipient(s).`);
+    failed.forEach((result) => console.warn(result.reason?.message || result.reason));
+  }
+  return { sent: results.length - failed.length, failed: failed.length, skipped: false };
+}
+
+async function sendAdminAlertTestEmail(email) {
+  const transporter = getMailTransporter();
+  if (!transporter) return { sent: 0, failed: 0, skipped: true };
+  const appUrl = getAppUrl();
+  const notification = {
+    title: "Admin alert email test",
+    message: "This confirms HAAK Asset Management can send alerts to this admin email address.",
+    companyName: "HAAK INFOTECH",
+    actorRole: "system",
+    actorName: "System",
+    entityType: "email",
+    tone: "success",
+    createdAt: new Date().toISOString()
+  };
+  await transporter.sendMail({
+    from: mailFrom,
+    to: email,
+    subject: "[HAAK Assets] Admin alert email test",
+    text: [
+      notification.title,
+      "",
+      notification.message,
+      appUrl ? `Open: ${appUrl}` : ""
+    ].filter(Boolean).join("\n"),
+    html: buildNotificationEmail(notification, appUrl),
+    attachments: fs.existsSync(emailLogoPath)
+      ? [{ filename: "haak-infotech.png", path: emailLogoPath, cid: emailLogoCid }]
+      : []
+  });
+  return { sent: 1, failed: 0, skipped: false };
+}
+
+function newNotificationsFromState(nextState, currentState) {
+  const currentIds = new Set((currentState.notifications || []).map((notification) => notification.id));
+  return (nextState.notifications || []).filter((notification) => !currentIds.has(notification.id));
+>>>>>>> 4402920 (Updated Asset management app)
 }
 
 async function normalizePasswords(state) {
@@ -150,9 +647,9 @@ async function normalizePasswords(state) {
       }
       if (user.password) {
         const { password, ...withoutPassword } = user;
-        return { ...withoutPassword, passwordHash: await bcrypt.hash(password, 12) };
+        return { ...withoutPassword, passwordHash: await bcrypt.hash(password, 12), passwordChangedAt: user.passwordChangedAt || new Date().toISOString() };
       }
-      return user;
+      return { ...user, passwordChangedAt: user.passwordChangedAt || new Date().toISOString() };
     })
   );
   return { ...state, users };
@@ -234,6 +731,66 @@ function scopedAppeals(state, auth) {
   return auth.role === "admin" ? state.appeals : state.appeals.filter((appeal) => appeal.clientId === auth.clientId);
 }
 
+function mergeClientState(nextState, currentState, auth) {
+  const ownClientId = auth.clientId;
+  const submittedOwnAssets = new Map(
+    (nextState.assets || [])
+      .filter((asset) => !asset.clientId || asset.clientId === ownClientId || currentState.assets.some((current) => current.id === asset.id && current.clientId === ownClientId))
+      .map((asset) => [asset.id, asset])
+  );
+
+  const existingAssetIds = new Set(currentState.assets.map((asset) => asset.id));
+  const preservedAndEditedAssets = currentState.assets.map((asset) => {
+    if (asset.clientId !== ownClientId) return asset;
+    const submitted = submittedOwnAssets.get(asset.id);
+    return submitted ? { ...asset, ...submitted, id: asset.id, clientId: ownClientId } : asset;
+  });
+  const addedAssets = (nextState.assets || [])
+    .filter((asset) => !existingAssetIds.has(asset.id))
+    .map((asset) => ({ ...asset, clientId: ownClientId }));
+  const currentNotificationIds = new Set((currentState.notifications || []).map((notification) => notification.id));
+  const addedNotifications = (nextState.notifications || [])
+    .filter((notification) => !currentNotificationIds.has(notification.id) && notification.clientId === ownClientId)
+    .map((notification) => ({ ...notification, clientId: ownClientId }));
+
+  return {
+    ...currentState,
+    assets: [...addedAssets, ...preservedAndEditedAssets],
+    credentialRequests: nextState.credentialRequests || currentState.credentialRequests,
+    appeals: nextState.appeals || currentState.appeals,
+    appealMessages: nextState.appealMessages || currentState.appealMessages,
+    notifications: [...addedNotifications, ...(currentState.notifications || [])]
+  };
+}
+
+function isWithinAmcEditWindow(company) {
+  if (!company?.amcEndDate) return true;
+  const endDate = new Date(`${company.amcEndDate}T00:00:00`);
+  if (Number.isNaN(endDate.getTime())) return true;
+  const todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0);
+  const daysLeft = Math.ceil((endDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+  return daysLeft >= 0 && daysLeft <= 10;
+}
+
+function preserveLockedAmcFields(nextState, currentState) {
+  const currentCompanies = new Map((currentState.clients || []).map((client) => [client.id, client]));
+  return {
+    ...nextState,
+    clients: (nextState.clients || []).map((client) => {
+      const current = currentCompanies.get(client.id);
+      if (!current || isWithinAmcEditWindow(current)) return client;
+      return {
+        ...client,
+        amcStartDate: current.amcStartDate || "",
+        amcEndDate: current.amcEndDate || "",
+        amcTerm: current.amcTerm || "",
+        amcRenewalNoticeSentAt: current.amcRenewalNoticeSentAt || ""
+      };
+    })
+  };
+}
+
 function validatePassword(password) {
   if (typeof password !== "string" || password.length < Number(process.env.MIN_PASSWORD_LENGTH || 8)) {
     return "Password must be at least 8 characters.";
@@ -246,7 +803,7 @@ function validateEmail(email) {
 }
 
 function normalizePhone(phone) {
-  return String(phone || "").replace(/\D+/g, "");
+  return String(phone || "").replace(/\D+/g, "").slice(0, 10);
 }
 
 function collectReferencedUploadUrls(state) {
@@ -335,6 +892,7 @@ app.put("/api/state", requireAuth, async (request, response) => {
       return response.status(400).json({ error: "Invalid app state payload." });
     }
 
+<<<<<<< HEAD
     const duplicateAssetCodes = duplicateValues(nextState.assets.map((asset) => asset.assetCode));
     if (duplicateAssetCodes.length > 0) {
       return response.status(409).json({ error: `Duplicate asset code found: ${duplicateAssetCodes.join(", ")}.` });
@@ -347,6 +905,43 @@ app.put("/api/state", requireAuth, async (request, response) => {
   } catch (error) {
     sendApiError(response, error);
   }
+=======
+  const currentState = await readState();
+  const scopedState = request.auth.role === "admin" ? nextState : mergeClientState(nextState, currentState, request.auth);
+  const lockedState = preserveLockedAmcFields(scopedState, currentState);
+
+  // Detect newly created clients with plain text passwords before they get merged/hashed
+  const currentUsersMap = new Map(currentState.users.map((u) => [u.id, u]));
+  const newClientsToWelcome = [];
+  if (lockedState && Array.isArray(lockedState.users)) {
+    for (const user of lockedState.users) {
+      if (user.role === "client" && user.password && !currentUsersMap.has(user.id)) {
+        const client = (lockedState.clients || []).find((c) => c.id === user.clientId);
+        newClientsToWelcome.push({ client, user, plainPassword: user.password });
+      }
+    }
+  }
+
+  const mergedState = await mergePasswords(lockedState, currentState);
+  await writeState(mergedState);
+
+  // Send welcome emails to newly added clients
+  for (const item of newClientsToWelcome) {
+    try {
+      await sendClientWelcomeEmail(item.client, item.user, item.plainPassword);
+    } catch (error) {
+      console.warn("Welcome email delivery failed for client:", item.user.email, error);
+    }
+  }
+
+  try {
+    await emailNewNotifications(newNotificationsFromState(mergedState, currentState), mergedState);
+  } catch (error) {
+    console.warn("Notification email delivery failed.");
+    console.warn(error);
+  }
+  response.json(publicState(mergedState));
+>>>>>>> 4402920 (Updated Asset management app)
 });
 
 app.get("/api/users/me", requireAuth, async (request, response) => {
@@ -354,6 +949,47 @@ app.get("/api/users/me", requireAuth, async (request, response) => {
   const user = state.users.find((item) => item.id === request.auth.sub);
   if (!user) return response.status(404).json({ error: "User not found." });
   response.json(publicUser(user));
+});
+
+app.post("/api/email/admin-alert/test", requireAuth, requireAdmin, async (request, response) => {
+  const state = await readState();
+  const email = String(request.body?.email || state.settings?.adminAlertEmail || "").trim();
+  if (!validateEmail(email)) {
+    return response.status(400).json({ error: "Enter a valid admin alert email address." });
+  }
+  try {
+    const result = await sendAdminAlertTestEmail(email);
+    response.json({ ok: result.sent > 0, email, result });
+  } catch (error) {
+    console.warn("Admin alert test email failed:", error);
+    response.status(502).json({ error: "Unable to send test email.", detail: error.code || error.responseCode || "SMTP_ERROR" });
+  }
+});
+
+app.put("/api/users/me/password", requireAuth, requireAdmin, async (request, response) => {
+  const { currentPassword, newPassword } = request.body || {};
+  if (!currentPassword || !newPassword) {
+    return response.status(400).json({ error: "Current password and new password are required." });
+  }
+
+  const passwordError = validatePassword(newPassword);
+  if (passwordError) return response.status(400).json({ error: passwordError });
+
+  const state = await readState();
+  const user = state.users.find((item) => item.id === request.auth.sub);
+  if (!user) return response.status(404).json({ error: "User not found." });
+  if (!(await verifyPassword(user, currentPassword))) {
+    return response.status(401).json({ error: "Current password is incorrect." });
+  }
+
+  const updatedUser = { ...user, passwordHash: await bcrypt.hash(newPassword, 12), passwordChangedAt: new Date().toISOString() };
+  delete updatedUser.password;
+  const nextState = {
+    ...state,
+    users: state.users.map((item) => (item.id === user.id ? updatedUser : item))
+  };
+  await writeState(nextState);
+  response.json({ user: publicUser(updatedUser), state: publicState(nextState) });
 });
 
 app.get("/api/companies", requireAuth, async (request, response) => {
@@ -379,8 +1015,13 @@ app.post("/api/companies", requireAuth, requireAdmin, async (request, response) 
     contactPerson: form.contactPerson,
     email: form.email,
     phone: normalizePhone(form.phone),
-    address: form.address || "",
+    address: String(form.address || "").slice(0, 150),
     logoUrl: form.logoUrl || "",
+    assetCategories: Array.isArray(form.assetCategories) ? form.assetCategories : [],
+    amcStartDate: form.amcStartDate || "",
+    amcEndDate: form.amcEndDate || "",
+    amcTerm: form.amcTerm || "",
+    amcRenewalNoticeSentAt: "",
     status: form.status || "active"
   };
   const users = [...state.users];
@@ -394,14 +1035,49 @@ app.post("/api/companies", requireAuth, requireAdmin, async (request, response) 
       email: form.loginEmail,
       role: "client",
       clientId,
-      passwordHash: await bcrypt.hash(form.loginPassword, 12)
+      passwordHash: await bcrypt.hash(form.loginPassword, 12),
+      passwordChangedAt: new Date().toISOString()
     };
     users.push(user);
   }
 
-  const nextState = { ...state, clients: [company, ...state.clients], users };
+  const notification = {
+    id: uid("note"),
+    type: "company_created",
+    title: "Company added",
+    message: `${company.companyName} was added by admin.`,
+    clientId,
+    companyName: company.companyName,
+    actorRole: "admin",
+    actorName: request.auth?.name || "Admin",
+    entityType: "company",
+    entityId: clientId,
+    tone: "info",
+    readBy: [],
+    createdAt: new Date().toISOString()
+  };
+  const nextState = { ...state, clients: [company, ...state.clients], users, notifications: [notification, ...(state.notifications || [])] };
   await writeState(nextState);
-  response.status(201).json({ company, user: publicUser(user), state: publicState(nextState) });
+
+  let welcomeEmail = { sent: 0, failed: 0, skipped: true };
+  if (user && form.loginPassword) {
+    try {
+      welcomeEmail = await sendClientWelcomeEmail(company, user, form.loginPassword);
+    } catch (error) {
+      console.warn("Failed to send welcome email in POST /api/companies:", error);
+      welcomeEmail = { sent: 0, failed: 1, skipped: false };
+    }
+  }
+
+  let notificationEmail = { sent: 0, failed: 0, skipped: true };
+  try {
+    notificationEmail = await emailNewNotifications([notification], nextState);
+  } catch (error) {
+    console.warn("Failed to send company notification email:", error);
+    notificationEmail = { sent: 0, failed: 1, skipped: false };
+  }
+
+  response.status(201).json({ company, user: publicUser(user), state: publicState(nextState), email: { welcome: welcomeEmail, notification: notificationEmail } });
 });
 
 app.put("/api/companies/:id", requireAuth, requireAdmin, async (request, response) => {
@@ -412,7 +1088,23 @@ app.put("/api/companies/:id", requireAuth, requireAdmin, async (request, respons
     return response.status(400).json({ error: "Enter a valid email address." });
   }
 
-  const company = { ...existing, ...request.body, id: existing.id, ...(request.body?.phone !== undefined ? { phone: normalizePhone(request.body.phone) } : {}) };
+  const requestedCompany = {
+    ...existing,
+    ...request.body,
+    id: existing.id,
+    assetCategories: Array.isArray(request.body?.assetCategories) ? request.body.assetCategories : existing.assetCategories,
+    ...(request.body?.phone !== undefined ? { phone: normalizePhone(request.body.phone) } : {}),
+    ...(request.body?.address !== undefined ? { address: String(request.body.address || "").slice(0, 150) } : {})
+  };
+  const company = isWithinAmcEditWindow(existing)
+    ? requestedCompany
+    : {
+        ...requestedCompany,
+        amcStartDate: existing.amcStartDate || "",
+        amcEndDate: existing.amcEndDate || "",
+        amcTerm: existing.amcTerm || "",
+        amcRenewalNoticeSentAt: existing.amcRenewalNoticeSentAt || ""
+      };
   const nextState = { ...state, clients: state.clients.map((client) => (client.id === existing.id ? company : client)) };
   await writeState(nextState);
   response.json(company);
@@ -446,7 +1138,7 @@ app.put("/api/clients/:id/credentials", requireAuth, requireAdmin, async (reques
   const updatedUser = {
     ...targetUser,
     email: String(email).trim(),
-    ...(password ? { passwordHash: await bcrypt.hash(password, 12) } : {})
+    ...(password ? { passwordHash: await bcrypt.hash(password, 12), passwordChangedAt: new Date().toISOString() } : {})
   };
   delete updatedUser.password;
 
@@ -455,6 +1147,14 @@ app.put("/api/clients/:id/credentials", requireAuth, requireAdmin, async (reques
     users: state.users.map((user) => (user.id === targetUser.id ? updatedUser : user))
   };
   await writeState(nextState);
+
+  // Send update email notification
+  const client = state.clients.find((c) => c.id === clientId);
+  try {
+    await sendClientCredentialsUpdatedEmail(client, targetUser, String(email).trim(), password);
+  } catch (error) {
+    console.warn("Failed to send credentials update email:", error);
+  }
 
   response.json({ user: publicUser(updatedUser), state: publicState(nextState) });
 });
@@ -481,13 +1181,18 @@ app.get("/api/assets", requireAuth, async (request, response) => {
 app.post("/api/assets", requireAuth, async (request, response) => {
   const state = await readState();
   const form = request.body || {};
-  if (!form.assetCode || !form.name || !form.clientId) {
+  const clientId = request.auth.role === "admin" ? form.clientId : request.auth.clientId;
+  if (!form.assetCode || !form.name || !clientId) {
     return response.status(400).json({ error: "Asset code, name, and company are required." });
   }
+<<<<<<< HEAD
   if (request.auth.role === "client" && form.clientId !== request.auth.clientId) {
     return response.status(403).json({ error: "You can only add assets for your own company." });
   }
   if (!state.clients.some((client) => client.id === form.clientId)) {
+=======
+  if (!state.clients.some((client) => client.id === clientId)) {
+>>>>>>> 4402920 (Updated Asset management app)
     return response.status(400).json({ error: "Company does not exist." });
   }
   if (hasDuplicateAssetCode(state.assets, form.assetCode)) {
@@ -497,7 +1202,7 @@ app.post("/api/assets", requireAuth, async (request, response) => {
   const asset = {
     id: form.id || uid("a"),
     assetCode: form.assetCode,
-    clientId: form.clientId,
+    clientId,
     name: form.name,
     userName: form.userName || "",
     category: form.category || "",
@@ -518,14 +1223,26 @@ app.post("/api/assets", requireAuth, async (request, response) => {
   response.status(201).json(asset);
 });
 
-app.put("/api/assets/:id", requireAuth, requireAdmin, async (request, response) => {
+app.put("/api/assets/:id", requireAuth, async (request, response) => {
   const state = await readState();
   const existing = state.assets.find((asset) => asset.id === request.params.id);
   if (!existing) return response.status(404).json({ error: "Asset not found." });
+<<<<<<< HEAD
   const asset = { ...existing, ...request.body, id: existing.id };
   if (hasDuplicateAssetCode(state.assets, asset.assetCode, existing.id)) {
     return response.status(409).json({ error: `Asset code ${asset.assetCode} already exists.` });
   }
+=======
+  if (!canAccessClient(request.auth, existing.clientId)) {
+    return response.status(403).json({ error: "Asset access denied." });
+  }
+  const asset = {
+    ...existing,
+    ...request.body,
+    id: existing.id,
+    clientId: request.auth.role === "admin" ? (request.body?.clientId || existing.clientId) : existing.clientId
+  };
+>>>>>>> 4402920 (Updated Asset management app)
   const nextState = { ...state, assets: state.assets.map((item) => (item.id === existing.id ? asset : item)) };
   await writeState(nextState);
   response.json(asset);

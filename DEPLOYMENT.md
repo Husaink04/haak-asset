@@ -41,8 +41,21 @@ Set these values in `.env`:
 APP_PORT=4000
 POSTGRES_PASSWORD=use-a-strong-postgres-password
 JWT_SECRET=use-a-long-random-secret
+VITE_API_URL=/api
 PUBLIC_API_URL=http://YOUR_SERVER_IP:4000
+PUBLIC_APP_URL=http://YOUR_SERVER_IP:4000
 CORS_ORIGIN=http://YOUR_SERVER_IP:4000
+```
+
+For email notifications, also set SMTP values:
+
+```text
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-smtp-user
+SMTP_PASS=your-smtp-password
+MAIL_FROM="HAAK Asset Management <no-reply@yourdomain.com>"
 ```
 
 Generate a strong JWT secret with:
