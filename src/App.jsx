@@ -811,7 +811,9 @@ function NotificationCenter({ user, notifications, unreadCount, onMarkRead, onCl
 function Shell({ user, children, view, setView, onLogout, headerAction, notice, clientBrand, apiStatus = "offline", theme = "light", onToggleTheme, notifications = [], unreadCount = 0, onMarkNotificationsRead, onClearNotifications }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isCompactViewport, setIsCompactViewport] = useState(() => window.matchMedia("(max-width: 1180px)").matches);
   const isDarkTheme = theme === "dark";
+  const shellCollapsed = sidebarCollapsed || isCompactViewport;
   const nav = user.role === "admin"
     ? [
         ["dashboard", "Dashboard", Archive],
@@ -834,13 +836,21 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
   }, [sidebarCollapsed]);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 1180px)");
+    const syncViewport = (event) => setIsCompactViewport(event.matches);
+    setIsCompactViewport(mediaQuery.matches);
+    mediaQuery.addEventListener("change", syncViewport);
+    return () => mediaQuery.removeEventListener("change", syncViewport);
+  }, []);
+
+  useEffect(() => {
     setShowNotifications(false);
   }, [view]);
 
   return (
     <>
       <Toaster richColors closeButton position="top-right" />
-      <div className={`app-shell ${user.role}-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <div className={`app-shell ${user.role}-shell ${shellCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside>
         <div className="logo">
           <img src="/haak-logo-transparent.png" alt="HAAK INFOTECH" />
@@ -852,7 +862,7 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
         <div className="sidebar-section-label">Main</div>
         <nav>
           {nav.map(([id, label, Icon]) => (
-            <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)} title={sidebarCollapsed ? label : undefined} aria-label={label}>
+            <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)} title={shellCollapsed ? label : undefined} aria-label={label}>
               <Icon size={18} />
               <span className="nav-label">{label}</span>
             </button>
@@ -864,12 +874,13 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
             className="collapse-toggle"
             type="button"
             onClick={() => setSidebarCollapsed((current) => !current)}
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!sidebarCollapsed}
+            aria-label={shellCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={shellCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!shellCollapsed}
+            disabled={isCompactViewport}
           >
-            {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-            <span>{sidebarCollapsed ? "Expand" : "Collapse"}</span>
+            {shellCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            <span>{shellCollapsed ? "Expand" : "Collapse"}</span>
           </button>
           <button
             className="theme-toggle"
@@ -881,7 +892,7 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
           >
             {isDarkTheme ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button className="logout" onClick={onLogout} title={sidebarCollapsed ? "Logout" : undefined} aria-label="Logout"><LogOut size={18} /> <span>Logout</span></button>
+          <button className="logout" onClick={onLogout} title={shellCollapsed ? "Logout" : undefined} aria-label="Logout"><LogOut size={18} /> <span>Logout</span></button>
         </div>
       </aside>
       <div className="workspace">
