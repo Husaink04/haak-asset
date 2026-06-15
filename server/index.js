@@ -123,7 +123,6 @@ function publicState(state) {
   };
 }
 
-<<<<<<< HEAD
 function duplicateValues(values) {
   const seen = new Set();
   const duplicates = new Set();
@@ -147,7 +146,8 @@ function sendApiError(response, error) {
   }
   console.error(error);
   return response.status(500).json({ error: "Server error. Please try again." });
-=======
+}
+
 function isEmailEnabled() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
@@ -635,7 +635,6 @@ async function sendAdminAlertTestEmail(email) {
 function newNotificationsFromState(nextState, currentState) {
   const currentIds = new Set((currentState.notifications || []).map((notification) => notification.id));
   return (nextState.notifications || []).filter((notification) => !currentIds.has(notification.id));
->>>>>>> 4402920 (Updated Asset management app)
 }
 
 async function normalizePasswords(state) {
@@ -892,56 +891,49 @@ app.put("/api/state", requireAuth, async (request, response) => {
       return response.status(400).json({ error: "Invalid app state payload." });
     }
 
-<<<<<<< HEAD
     const duplicateAssetCodes = duplicateValues(nextState.assets.map((asset) => asset.assetCode));
     if (duplicateAssetCodes.length > 0) {
       return response.status(409).json({ error: `Duplicate asset code found: ${duplicateAssetCodes.join(", ")}.` });
     }
 
     const currentState = await readState();
-    const mergedState = await mergePasswords(nextState, currentState);
+    const scopedState = request.auth.role === "admin" ? nextState : mergeClientState(nextState, currentState, request.auth);
+    const lockedState = preserveLockedAmcFields(scopedState, currentState);
+
+    // Detect newly created clients with plain text passwords before they get merged/hashed.
+    const currentUsersMap = new Map(currentState.users.map((u) => [u.id, u]));
+    const newClientsToWelcome = [];
+    if (lockedState && Array.isArray(lockedState.users)) {
+      for (const user of lockedState.users) {
+        if (user.role === "client" && user.password && !currentUsersMap.has(user.id)) {
+          const client = (lockedState.clients || []).find((c) => c.id === user.clientId);
+          newClientsToWelcome.push({ client, user, plainPassword: user.password });
+        }
+      }
+    }
+
+    const mergedState = await mergePasswords(lockedState, currentState);
     await writeState(mergedState);
+
+    // Send welcome emails to newly added clients.
+    for (const item of newClientsToWelcome) {
+      try {
+        await sendClientWelcomeEmail(item.client, item.user, item.plainPassword);
+      } catch (error) {
+        console.warn("Welcome email delivery failed for client:", item.user.email, error);
+      }
+    }
+
+    try {
+      await emailNewNotifications(newNotificationsFromState(mergedState, currentState), mergedState);
+    } catch (error) {
+      console.warn("Notification email delivery failed.");
+      console.warn(error);
+    }
     response.json(publicState(mergedState));
   } catch (error) {
     sendApiError(response, error);
   }
-=======
-  const currentState = await readState();
-  const scopedState = request.auth.role === "admin" ? nextState : mergeClientState(nextState, currentState, request.auth);
-  const lockedState = preserveLockedAmcFields(scopedState, currentState);
-
-  // Detect newly created clients with plain text passwords before they get merged/hashed
-  const currentUsersMap = new Map(currentState.users.map((u) => [u.id, u]));
-  const newClientsToWelcome = [];
-  if (lockedState && Array.isArray(lockedState.users)) {
-    for (const user of lockedState.users) {
-      if (user.role === "client" && user.password && !currentUsersMap.has(user.id)) {
-        const client = (lockedState.clients || []).find((c) => c.id === user.clientId);
-        newClientsToWelcome.push({ client, user, plainPassword: user.password });
-      }
-    }
-  }
-
-  const mergedState = await mergePasswords(lockedState, currentState);
-  await writeState(mergedState);
-
-  // Send welcome emails to newly added clients
-  for (const item of newClientsToWelcome) {
-    try {
-      await sendClientWelcomeEmail(item.client, item.user, item.plainPassword);
-    } catch (error) {
-      console.warn("Welcome email delivery failed for client:", item.user.email, error);
-    }
-  }
-
-  try {
-    await emailNewNotifications(newNotificationsFromState(mergedState, currentState), mergedState);
-  } catch (error) {
-    console.warn("Notification email delivery failed.");
-    console.warn(error);
-  }
-  response.json(publicState(mergedState));
->>>>>>> 4402920 (Updated Asset management app)
 });
 
 app.get("/api/users/me", requireAuth, async (request, response) => {
@@ -1185,14 +1177,7 @@ app.post("/api/assets", requireAuth, async (request, response) => {
   if (!form.assetCode || !form.name || !clientId) {
     return response.status(400).json({ error: "Asset code, name, and company are required." });
   }
-<<<<<<< HEAD
-  if (request.auth.role === "client" && form.clientId !== request.auth.clientId) {
-    return response.status(403).json({ error: "You can only add assets for your own company." });
-  }
-  if (!state.clients.some((client) => client.id === form.clientId)) {
-=======
   if (!state.clients.some((client) => client.id === clientId)) {
->>>>>>> 4402920 (Updated Asset management app)
     return response.status(400).json({ error: "Company does not exist." });
   }
   if (hasDuplicateAssetCode(state.assets, form.assetCode)) {
@@ -1227,12 +1212,6 @@ app.put("/api/assets/:id", requireAuth, async (request, response) => {
   const state = await readState();
   const existing = state.assets.find((asset) => asset.id === request.params.id);
   if (!existing) return response.status(404).json({ error: "Asset not found." });
-<<<<<<< HEAD
-  const asset = { ...existing, ...request.body, id: existing.id };
-  if (hasDuplicateAssetCode(state.assets, asset.assetCode, existing.id)) {
-    return response.status(409).json({ error: `Asset code ${asset.assetCode} already exists.` });
-  }
-=======
   if (!canAccessClient(request.auth, existing.clientId)) {
     return response.status(403).json({ error: "Asset access denied." });
   }
@@ -1242,7 +1221,9 @@ app.put("/api/assets/:id", requireAuth, async (request, response) => {
     id: existing.id,
     clientId: request.auth.role === "admin" ? (request.body?.clientId || existing.clientId) : existing.clientId
   };
->>>>>>> 4402920 (Updated Asset management app)
+  if (hasDuplicateAssetCode(state.assets, asset.assetCode, existing.id)) {
+    return response.status(409).json({ error: `Asset code ${asset.assetCode} already exists.` });
+  }
   const nextState = { ...state, assets: state.assets.map((item) => (item.id === existing.id ? asset : item)) };
   await writeState(nextState);
   response.json(asset);
