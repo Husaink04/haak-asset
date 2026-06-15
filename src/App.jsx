@@ -436,6 +436,18 @@ function formatTimestamp(value) {
   return `${day} ${month} ${year}, ${hours}:${minutes} ${period}`;
 }
 
+function formatCalendarDate(value) {
+  if (!value) return "Not set";
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? `${value}T00:00:00` : value;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return value;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
 function fileNameFromUrl(value) {
   if (!value) return "Uploaded file";
   try {
@@ -1000,7 +1012,7 @@ function AssetVisual({ asset, className = "" }) {
   );
 }
 
-function CompanyForm({ onCreate }) {
+function CompanyForm({ onCreate, className = "" }) {
   const steps = ["Company", "AMC", "Logo", "Login"];
   const [step, setStep] = useState(0);
   const [maxUnlockedStep, setMaxUnlockedStep] = useState(0);
@@ -1097,7 +1109,7 @@ function CompanyForm({ onCreate }) {
   }
 
   return (
-    <form className="panel asset-wizard company-wizard" onSubmit={submit}>
+    <form className={`panel asset-wizard company-wizard ${className}`.trim()} onSubmit={submit}>
       <div className="panel-head">
         <div>
           <span className="eyebrow">Step {step + 1} of {steps.length}</span>
@@ -1343,6 +1355,8 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
   const [uploadError, setUploadError] = useState("");
   const assignedAssets = assets.filter((asset) => asset.clientId === client.id);
   const canEditAmc = isWithinAmcEditWindow(client);
+  const activeAssetCount = assignedAssets.filter((asset) => asset.status === "active").length;
+  const amcLabel = client.amcEndDate ? formatCalendarDate(client.amcEndDate) : "Not set";
 
   function update(field, value) {
     if (["amcStartDate", "amcTerm", "amcEndDate"].includes(field) && !canEditAmc) return;
@@ -1410,53 +1424,153 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
   }
 
   return (
-    <form className="panel form-grid" onSubmit={submit}>
-      <h2>Edit company</h2>
-      <div className="company-logo-preview compact-logo-preview">
-        {form.logoUrl ? <img src={resolveMediaUrl(form.logoUrl)} alt={`${form.companyName} logo`} /> : <Building2 size={28} />}
-        <span>
-          <strong>{form.companyName}</strong>
-          <small>Company logo</small>
-        </span>
+    <form className="panel company-editor" onSubmit={submit}>
+      <div className="panel-head company-editor-head">
+        <div>
+          <span className="eyebrow">Company workspace</span>
+          <h2>Edit company details</h2>
+        </div>
+        <span className={statusClass(form.status)}>{form.status}</span>
       </div>
-      <input placeholder="Company name" value={form.companyName} onChange={(event) => update("companyName", event.target.value)} required />
-      <input placeholder="Contact person" value={form.contactPerson} onChange={(event) => update("contactPerson", event.target.value)} required />
-      <input type="email" placeholder="Client email" value={form.email} onChange={(event) => update("email", event.target.value)} required />
-      <input type="file" accept=".jpg,.jpeg,.png" onChange={uploadLogo} disabled={uploadingLogo} />
-      {uploadingLogo && <small className="upload-note">Uploading logo...</small>}
-      {uploadError && <small className="upload-error">{uploadError}</small>}
-      <input placeholder="Categories: Laptop, CCTV" value={form.assetCategoriesText} onChange={(event) => update("assetCategoriesText", event.target.value)} />
-      <div className="field-grid">
-        <input type="date" value={form.amcStartDate || ""} onChange={(event) => update("amcStartDate", event.target.value)} disabled={!canEditAmc} />
-        <select value={form.amcTerm || "1Y"} onChange={(event) => update("amcTerm", event.target.value)} disabled={!canEditAmc}>
-          {AMC_TERMS.map((term) => <option key={term.label} value={term.label}>{term.label}</option>)}
-        </select>
-      </div>
-      <input type="date" value={form.amcEndDate || ""} onChange={(event) => update("amcEndDate", event.target.value)} disabled={!canEditAmc} />
-      <div className="review-box">
-        <strong>AMC renewal</strong>
-        <small>
-          {canEditAmc
-            ? `Current end date: ${form.amcEndDate || "Not set"}`
-            : `Locked until 10 days before ${form.amcEndDate || "AMC end date"}.`}
-        </small>
-        <div className="field-grid">
-          <select value={form.renewalTerm || "1Y"} onChange={(event) => update("renewalTerm", event.target.value)} disabled={!canEditAmc}>
-            {AMC_TERMS.map((term) => <option key={term.label} value={term.label}>{term.label}</option>)}
-          </select>
-          <button className="secondary" type="button" onClick={renewAmc} disabled={!canEditAmc}>Renew AMC</button>
+
+      <div className="company-editor-summary">
+        <div className="company-logo-preview">
+          {form.logoUrl ? <img src={resolveMediaUrl(form.logoUrl)} alt={`${form.companyName} logo`} /> : <Building2 size={28} />}
+          <span>
+            <strong>{form.companyName}</strong>
+            <small>{form.contactPerson || "Primary contact pending"}</small>
+          </span>
+        </div>
+        <div className="company-health-grid">
+          <div className="company-health-card">
+            <small>Assigned assets</small>
+            <strong>{assignedAssets.length}</strong>
+            <span>{activeAssetCount} active</span>
+          </div>
+          <div className="company-health-card">
+            <small>AMC coverage</small>
+            <strong>{form.amcTerm || "Not set"}</strong>
+            <span>Ends {amcLabel}</span>
+          </div>
+          <div className="company-health-card">
+            <small>Portal access</small>
+            <strong>{form.email || "Not set"}</strong>
+            <span>{form.phone || "Phone pending"}</span>
+          </div>
         </div>
       </div>
-      <input inputMode="numeric" placeholder="Phone" value={form.phone} onChange={(event) => update("phone", event.target.value)} maxLength={10} />
-      <select value={form.status} onChange={(event) => update("status", event.target.value)}>
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-      </select>
-      <textarea placeholder="Address" value={form.address} onChange={(event) => update("address", event.target.value)} maxLength={150} />
-      <button className="primary" type="submit"><Save size={16} /> Save company</button>
-      <button className="danger" type="button" disabled={assignedAssets.length > 0} onClick={() => onDelete(client.id)}>
-        <Trash2 size={16} /> Delete company
-      </button>
+
+      <div className="company-editor-grid">
+        <section className="company-editor-section">
+          <div className="company-section-head">
+            <div>
+              <span className="eyebrow">Identity</span>
+              <h3>Company profile</h3>
+            </div>
+          </div>
+          <div className="field-grid">
+            <label>
+              Company name
+              <input placeholder="Company name" value={form.companyName} onChange={(event) => update("companyName", event.target.value)} required />
+            </label>
+            <label>
+              Contact person
+              <input placeholder="Contact person" value={form.contactPerson} onChange={(event) => update("contactPerson", event.target.value)} required />
+            </label>
+          </div>
+          <div className="field-grid">
+            <label>
+              Client email
+              <input type="email" placeholder="Client email" value={form.email} onChange={(event) => update("email", event.target.value)} required />
+            </label>
+            <label>
+              Phone
+              <input inputMode="numeric" placeholder="Phone" value={form.phone} onChange={(event) => update("phone", event.target.value)} maxLength={10} />
+            </label>
+          </div>
+          <label>
+            Address
+            <textarea placeholder="Address" value={form.address} onChange={(event) => update("address", event.target.value)} maxLength={150} />
+          </label>
+        </section>
+
+        <section className="company-editor-section">
+          <div className="company-section-head">
+            <div>
+              <span className="eyebrow">Branding</span>
+              <h3>Logo and categories</h3>
+            </div>
+          </div>
+          <label>
+            Upload logo
+            <input type="file" accept=".jpg,.jpeg,.png" onChange={uploadLogo} disabled={uploadingLogo} />
+          </label>
+          {uploadingLogo && <small className="upload-note">Uploading logo...</small>}
+          {uploadError && <small className="upload-error">{uploadError}</small>}
+          <label>
+            Company categories
+            <input placeholder="Laptop, CCTV, Printer" value={form.assetCategoriesText} onChange={(event) => update("assetCategoriesText", event.target.value)} />
+          </label>
+        </section>
+
+        <section className="company-editor-section">
+          <div className="company-section-head">
+            <div>
+              <span className="eyebrow">Contract</span>
+              <h3>AMC and access status</h3>
+            </div>
+          </div>
+          <div className="field-grid">
+            <label>
+              AMC starts
+              <input type="date" value={form.amcStartDate || ""} onChange={(event) => update("amcStartDate", event.target.value)} disabled={!canEditAmc} />
+            </label>
+            <label>
+              AMC term
+              <select value={form.amcTerm || "1Y"} onChange={(event) => update("amcTerm", event.target.value)} disabled={!canEditAmc}>
+                {AMC_TERMS.map((term) => <option key={term.label} value={term.label}>{term.label}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="field-grid">
+            <label>
+              AMC ends
+              <input type="date" value={form.amcEndDate || ""} onChange={(event) => update("amcEndDate", event.target.value)} disabled={!canEditAmc} />
+            </label>
+            <label>
+              Company status
+              <select value={form.status} onChange={(event) => update("status", event.target.value)}>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </label>
+          </div>
+          <div className="review-box">
+            <strong>AMC renewal</strong>
+            <small>
+              {canEditAmc
+                ? `Current end date: ${form.amcEndDate || "Not set"}`
+                : `Locked until 10 days before ${form.amcEndDate || "AMC end date"}.`}
+            </small>
+            <div className="field-grid">
+              <label>
+                Renewal term
+                <select value={form.renewalTerm || "1Y"} onChange={(event) => update("renewalTerm", event.target.value)} disabled={!canEditAmc}>
+                  {AMC_TERMS.map((term) => <option key={term.label} value={term.label}>{term.label}</option>)}
+                </select>
+              </label>
+              <button className="secondary company-renew-button" type="button" onClick={renewAmc} disabled={!canEditAmc}>Renew AMC</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div className="company-editor-actions">
+        <button className="primary" type="submit"><Save size={16} /> Save company</button>
+        <button className="danger" type="button" disabled={assignedAssets.length > 0} onClick={() => onDelete(client.id)}>
+          <Trash2 size={16} /> Delete company
+        </button>
+      </div>
       {assignedAssets.length > 0 && <small>Move or delete assigned assets before deleting this company.</small>}
     </form>
   );
@@ -1464,7 +1578,43 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
 
 function CompaniesPage({ user, data, setData, notify }) {
   const [selectedId, setSelectedId] = useState(data.clients[0]?.id);
-  const selected = data.clients.find((client) => client.id === selectedId) || data.clients[0];
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const companyDirectory = useMemo(() => data.clients.map((client) => {
+    const assignedAssets = data.assets.filter((asset) => asset.clientId === client.id);
+    return {
+      ...client,
+      assetCount: assignedAssets.length,
+      activeAssetCount: assignedAssets.filter((asset) => asset.status === "active").length
+    };
+  }), [data.assets, data.clients]);
+
+  const filteredClients = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return companyDirectory.filter((client) => {
+      const matchesFilter = statusFilter === "all" || client.status === statusFilter;
+      if (!matchesFilter) return false;
+      if (!query) return true;
+      return [
+        client.companyName,
+        client.contactPerson,
+        client.email,
+        client.phone
+      ].some((value) => String(value || "").toLowerCase().includes(query));
+    });
+  }, [companyDirectory, search, statusFilter]);
+
+  useEffect(() => {
+    if (!filteredClients.length) return;
+    if (!filteredClients.some((client) => client.id === selectedId)) {
+      setSelectedId(filteredClients[0].id);
+    }
+  }, [filteredClients, selectedId]);
+
+  const selected = companyDirectory.find((client) => client.id === selectedId) || filteredClients[0] || companyDirectory[0];
+  const activeCompanies = companyDirectory.filter((client) => client.status === "active").length;
+  const totalAssets = companyDirectory.reduce((sum, client) => sum + client.assetCount, 0);
 
   async function createCompany(form) {
     try {
@@ -1555,28 +1705,140 @@ function CompaniesPage({ user, data, setData, notify }) {
   }
 
   return (
-    <section className="three-column">
-      <div className="panel">
-        <h2>Company records</h2>
-        <div className="company-list">
-          {data.clients.map((client) => (
-            <button
-              className={selected?.id === client.id ? "company-row selectable active" : "company-row selectable"}
-              key={client.id}
-              onClick={() => setSelectedId(client.id)}
-            >
-              <CompanyLogo client={client} />
-              <span>
-                <strong>{client.companyName}</strong>
-                <small>{client.contactPerson} - {client.email}</small>
-              </span>
-              <span className={statusClass(client.status)}>{client.status}</span>
-            </button>
-          ))}
+    <section className="companies-page">
+      <div className="panel companies-hero">
+        <div className="companies-hero-copy">
+          <span className="eyebrow">Relationship management</span>
+          <h2>Companies</h2>
+          <p>Review account health, maintain contract details, and onboard new client companies from one clear workspace.</p>
+        </div>
+        <div className="companies-hero-stats">
+          <div className="companies-hero-stat">
+            <small>Total companies</small>
+            <strong>{companyDirectory.length}</strong>
+            <span>{activeCompanies} active</span>
+          </div>
+          <div className="companies-hero-stat">
+            <small>Managed assets</small>
+            <strong>{totalAssets}</strong>
+            <span>Across all clients</span>
+          </div>
+          <div className="companies-hero-stat">
+            <small>Directory results</small>
+            <strong>{filteredClients.length}</strong>
+            <span>{statusFilter === "all" ? "All statuses" : `${statusFilter} only`}</span>
+          </div>
         </div>
       </div>
-      {selected && <CompanyEditor key={selected.id} client={selected} assets={data.assets} onUpdate={updateCompany} onDelete={deleteCompany} />}
-      <CompanyForm onCreate={createCompany} />
+
+      <div className="companies-layout">
+        <div className="panel companies-directory">
+          <div className="panel-head">
+            <div>
+              <span className="eyebrow">Directory</span>
+              <h2>Company records</h2>
+            </div>
+            <span className="badge active">{filteredClients.length}</span>
+          </div>
+
+          <label className="search companies-search">
+            <Search size={16} />
+            <input
+              type="search"
+              placeholder="Search company, contact, email, phone"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+
+          <div className="segmented-control companies-filter" role="tablist" aria-label="Company status filter">
+            {["all", "active", "inactive"].map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={statusFilter === value ? "active" : ""}
+                onClick={() => setStatusFilter(value)}
+              >
+                {value === "all" ? "All" : value[0].toUpperCase() + value.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          <div className="company-list company-directory-list">
+            {filteredClients.length > 0 ? filteredClients.map((client) => (
+              <button
+                className={selected?.id === client.id ? "company-row company-directory-row selectable active" : "company-row company-directory-row selectable"}
+                key={client.id}
+                onClick={() => setSelectedId(client.id)}
+              >
+                <CompanyLogo client={client} />
+                <span className="company-directory-copy">
+                  <strong>{client.companyName}</strong>
+                  <small>{client.contactPerson}</small>
+                  <small>{client.email}</small>
+                </span>
+                <span className="company-directory-meta">
+                  <span className={statusClass(client.status)}>{client.status}</span>
+                  <small>{client.assetCount} assets</small>
+                </span>
+              </button>
+            )) : (
+              <div className="empty-inline">
+                No companies match the current search or status filter.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="companies-workspace">
+          {selected ? (
+            <>
+              <div className="panel company-overview">
+                <div className="company-overview-head">
+                  <div className="company-logo-preview company-overview-brand">
+                    {selected.logoUrl ? <img src={resolveMediaUrl(selected.logoUrl)} alt={`${selected.companyName} logo`} /> : <Building2 size={28} />}
+                    <span>
+                      <strong>{selected.companyName}</strong>
+                      <small>{selected.contactPerson}</small>
+                    </span>
+                  </div>
+                  <span className={statusClass(selected.status)}>{selected.status}</span>
+                </div>
+                <div className="company-overview-grid">
+                  <div className="company-overview-card">
+                    <small>Primary email</small>
+                    <strong>{selected.email}</strong>
+                    <span>{selected.phone || "Phone pending"}</span>
+                  </div>
+                  <div className="company-overview-card">
+                    <small>Asset coverage</small>
+                    <strong>{selected.assetCount} assigned</strong>
+                    <span>{selected.activeAssetCount} active right now</span>
+                  </div>
+                  <div className="company-overview-card">
+                    <small>AMC timeline</small>
+                    <strong>{selected.amcTerm || "Not set"}</strong>
+                    <span>Ends {selected.amcEndDate ? formatCalendarDate(selected.amcEndDate) : "Not set"}</span>
+                  </div>
+                </div>
+                <div className="company-overview-notes">
+                  <strong>Address</strong>
+                  <p>{selected.address || "Address not added yet."}</p>
+                </div>
+              </div>
+              <CompanyEditor key={selected.id} client={selected} assets={data.assets} onUpdate={updateCompany} onDelete={deleteCompany} />
+            </>
+          ) : (
+            <div className="panel empty-state">
+              <Building2 size={36} />
+              <h2>No company selected</h2>
+              <p>Create a company or adjust the search filters to continue.</p>
+            </div>
+          )}
+        </div>
+
+        <CompanyForm onCreate={createCompany} className="companies-create-panel" />
+      </div>
     </section>
   );
 }

@@ -1531,6 +1531,262 @@ small {
   align-items: start;
 }
 
+.companies-page {
+  display: grid;
+  gap: 18px;
+}
+
+.companies-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.companies-hero-copy,
+.companies-layout,
+.companies-workspace,
+.companies-directory,
+.company-overview,
+.company-editor,
+.company-editor-grid,
+.company-editor-section,
+.company-directory-copy,
+.company-directory-meta,
+.company-overview-notes,
+.company-section-head,
+.company-editor-actions,
+.company-editor-head {
+  display: grid;
+}
+
+.companies-hero-copy,
+.companies-workspace,
+.companies-directory,
+.company-overview,
+.company-editor,
+.company-editor-grid,
+.company-editor-section,
+.company-directory-copy,
+.company-directory-meta,
+.company-overview-notes,
+.company-section-head {
+  gap: 16px;
+}
+
+.companies-hero-copy {
+  gap: 8px;
+}
+
+.companies-hero-copy h2,
+.company-section-head h3,
+.company-overview-notes p {
+  margin: 0;
+}
+
+.companies-hero-copy p {
+  margin: 0;
+  max-width: 68ch;
+  color: #52616f;
+  line-height: 1.6;
+}
+
+.companies-hero-stats,
+.company-health-grid,
+.company-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.companies-hero-stat,
+.company-health-card,
+.company-overview-card {
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+}
+
+.companies-hero-stat small,
+.company-health-card small,
+.company-overview-card small,
+.company-directory-meta small {
+  color: #64748b;
+}
+
+.companies-hero-stat strong,
+.company-health-card strong,
+.company-overview-card strong {
+  font-size: 22px;
+  line-height: 1.1;
+  color: var(--haak-ink);
+  overflow-wrap: anywhere;
+}
+
+.companies-hero-stat span,
+.company-health-card span,
+.company-overview-card span {
+  color: #475569;
+  line-height: 1.35;
+}
+
+.companies-layout {
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.companies-directory {
+  position: sticky;
+  top: 28px;
+}
+
+.companies-create-panel {
+  grid-column: 1 / -1;
+}
+
+.companies-search input {
+  width: 100%;
+}
+
+.companies-filter {
+  width: 100%;
+}
+
+.company-directory-list {
+  max-height: calc(100vh - 270px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.company-directory-row {
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  align-items: start;
+  padding: 12px;
+}
+
+.company-directory-row strong,
+.company-overview-brand strong,
+.company-logo-preview strong {
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.company-directory-copy {
+  gap: 4px;
+  min-width: 0;
+}
+
+.company-directory-copy small {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.company-directory-meta {
+  justify-items: end;
+  gap: 8px;
+  min-width: 88px;
+}
+
+.company-logo-preview span,
+.company-overview-brand span {
+  min-width: 0;
+}
+
+.company-overview-head,
+.company-editor-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.company-overview-brand {
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+}
+
+.company-overview-card {
+  align-content: start;
+  min-height: 100px;
+}
+
+.company-overview-notes {
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.company-overview-notes strong {
+  color: var(--haak-ink);
+}
+
+.company-overview-notes p {
+  color: #52616f;
+  line-height: 1.55;
+}
+
+.company-editor-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.company-editor-summary {
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.company-editor-section {
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.company-section-head {
+  gap: 4px;
+}
+
+.company-renew-button {
+  align-self: end;
+  min-height: 44px;
+}
+
+.company-editor-actions {
+  grid-template-columns: repeat(2, minmax(0, max-content));
+  gap: 10px;
+}
+
+@media (min-width: 1501px) {
+  .companies-layout {
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1.35fr) minmax(320px, 0.92fr);
+  }
+
+  .companies-create-panel {
+    grid-column: auto;
+    position: sticky;
+    top: 28px;
+  }
+}
+
+@media (max-width: 1500px) and (min-width: 981px) {
+  .company-editor-summary,
+  .company-overview-head,
+  .company-health-grid,
+  .company-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .companies-hero-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .assets-layout {
   display: grid;
   grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
@@ -2225,7 +2481,7 @@ dl dt {
 }
 
 .company-stepper {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .step {
@@ -3092,6 +3348,10 @@ dl dt {
   .app-shell,
   .two-column,
   .three-column,
+  .companies-hero,
+  .companies-layout,
+  .company-overview-head,
+  .company-editor-summary,
   .dashboard-hero,
   .dashboard-main-grid,
   .dashboard-lower-grid,
@@ -3125,7 +3385,9 @@ dl dt {
 
   .assets-rail,
   .asset-create-panel,
-  .service-form {
+  .service-form,
+  .companies-directory,
+  .companies-create-panel {
     position: static;
     max-height: none;
     overflow: visible;
@@ -3407,7 +3669,11 @@ dl dt {
   .asset-media-stage,
   .asset-review-grid,
   .asset-subnav,
-  .settings-row {
+  .settings-row,
+  .companies-hero-stats,
+  .company-health-grid,
+  .company-overview-grid,
+  .company-editor-actions {
     grid-template-columns: 1fr;
   }
 
@@ -3428,8 +3694,15 @@ dl dt {
     grid-template-columns: 44px 1fr;
   }
 
-  .company-row .badge {
+  .company-row .badge,
+  .company-directory-meta {
     grid-column: 2;
+    justify-items: start;
+  }
+
+  .company-overview-card,
+  .company-health-card {
+    min-height: auto;
   }
 
   .appeal-card {
