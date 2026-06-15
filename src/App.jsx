@@ -2445,8 +2445,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
   }
 
   function openAssetForm() {
-    setShowAssetForm(true);
-    setEditingId(null);
+    setAssetView("add");
   }
 
   function createCategory(name) {
@@ -2519,8 +2518,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
                     onSelect={setSelectedId}
                     onEdit={user.role === "admin" ? () => {
                       setSelectedId(asset.id);
-                      setEditingId(asset.id);
-                      setShowAssetForm(false);
+                      setAssetView("edit");
                     } : null}
                   />
                 ))}
@@ -2583,20 +2581,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
                   </div>
                 </div>
                 {user.role === "admin" && (
-              <>
-                {editingId === selected.id ? (
-                  <>
-                    <AssetEditor key={selected.id} asset={selected} clients={data.clients} categories={assetCategories} onUpdate={updateAsset} onDelete={deleteAsset} />
-                    <AssetMediaPanel
-                      asset={selected}
-                      onAddImage={(imageUrl) => addImage(selected.id, imageUrl)}
-                      onAddDocument={(documentName) => addDocument(selected.id, documentName)}
-                      onRemoveImage={(imageUrl) => removeImage(selected.id, imageUrl)}
-                      onRemoveDocument={(_document, index) => removeDocument(selected.id, index)}
-                    />
-                    <LifecycleManager asset={selected} onAddLifecycle={(form) => addLifecycle(selected.id, form)} />
-                  </>
-                ) : (
                   <>
                     <AssetMediaPanel
                       asset={selected}
@@ -2607,8 +2591,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
                     />
                     <LifecycleManager asset={selected} onAddLifecycle={(form) => addLifecycle(selected.id, form)} />
                   </>
-                )}
-              </>
             )}
               </>
             )}
@@ -2651,7 +2633,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
               )
             )}
           </>
-        ) : !showAssetForm ? (
+        ) : (
           <div className="panel empty-state asset-empty-state">
             <Archive size={28} />
             <h2>{user.role === "admin" ? "No assets yet" : "No assets available"}</h2>
@@ -2662,7 +2644,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
               </button>
             )}
           </div>
-        ) : null}
+        )}
       </div>
     </section>
   );
