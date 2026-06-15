@@ -1761,8 +1761,14 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
     assetCode: "",
     clientId: lockedClientId || clients[0]?.id || "",
     category: categories[0] || "",
-    userName: ""
+    userName: "",
+    location: "",
+    image: "",
+    documents: []
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   useEffect(() => {
     setForm((current) => {
@@ -1832,10 +1838,21 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
       assetCode: generateAssetCode(clients, existingAssets, defaultClientId, defaultCategory),
       category: defaultCategory,
       name: "",
-      userName: ""
+      userName: "",
+      location: "",
+      image: "",
+      documents: []
     });
+    setUploadError("");
     setStep(0);
     setMaxUnlockedStep(0);
+  }
+
+  function canContinue() {
+    if (step === 0) return Boolean(form.clientId);
+    if (step === 1) return Boolean(form.category);
+    if (step === 2) return Boolean(form.name.trim());
+    return Boolean(form.userName.trim());
   }
 
   function goToStep(index) {

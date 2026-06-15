@@ -55,6 +55,7 @@ app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS || 1));
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
+      "img-src": ["'self'", "data:", "https:"],
       "upgrade-insecure-requests": null
     }
   },
