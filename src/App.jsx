@@ -754,8 +754,8 @@ function AdminIdentityBadge({ apiStatus }) {
     <div className={`admin-identity-chip ${isOnline ? "online" : "offline"}`} title={isOnline ? "System online" : "Connection issue"}>
       {isOnline ? <Wifi size={17} /> : <WifiOff size={17} />}
       <span>
-        <strong>ADMIN HAAK IT SOLUTIONS</strong>
-        <small>{isOnline ? "Online" : "Offline"}</small>
+        <strong>System status</strong>
+        <small>{isOnline ? "Live sync" : "Offline mode"}</small>
       </span>
     </div>
   );
@@ -833,6 +833,10 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
     localStorage.setItem("haak-sidebar-collapsed", sidebarCollapsed ? "1" : "0");
   }, [sidebarCollapsed]);
 
+  useEffect(() => {
+    setShowNotifications(false);
+  }, [view]);
+
   return (
     <>
       <Toaster richColors closeButton position="top-right" />
@@ -840,21 +844,22 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
       <aside>
         <div className="logo">
           <img src="/haak-logo-transparent.png" alt="HAAK INFOTECH" />
-          <span className="logo-label">Asset Management</span>
+          <div className="logo-copy">
+            <strong className="logo-label">Asset Management</strong>
+            <small>{user.role === "admin" ? "Admin workspace" : "Client workspace"}</small>
+          </div>
         </div>
+        <div className="sidebar-section-label">Main</div>
         <nav>
           {nav.map(([id, label, Icon]) => (
             <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)} title={sidebarCollapsed ? label : undefined} aria-label={label}>
-              <Icon size={18} /> <span>{label}</span>
+              <Icon size={18} />
+              <span className="nav-label">{label}</span>
             </button>
           ))}
-          <button className={showNotifications ? "active" : ""} type="button" onClick={() => setShowNotifications((current) => !current)} title={sidebarCollapsed ? "Notifications" : undefined} aria-label="Notifications">
-            <Bell size={18} />
-            <span>Notifications</span>
-            {unreadCount > 0 && <small className="sidebar-count">{unreadCount}</small>}
-          </button>
         </nav>
         <div className="sidebar-actions">
+          <div className="sidebar-section-label">Preferences</div>
           <button
             className="collapse-toggle"
             type="button"
@@ -881,13 +886,14 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
       </aside>
       <div className="workspace">
         <header>
-          <div>
+          <div className="page-heading">
             <span className="eyebrow">{user.role === "admin" ? "Admin portal" : "Client portal"}</span>
             <h1>{view === "dashboard" ? "Dashboard" : view[0].toUpperCase() + view.slice(1)}</h1>
           </div>
           <div className="header-actions">
+            {headerAction}
             <div className="notification-shell">
-              <button className="notification-bell-button" type="button" onClick={() => setShowNotifications((current) => !current)} aria-label="Open notifications">
+              <button className={`notification-bell-button ${showNotifications ? "active" : ""}`} type="button" onClick={() => setShowNotifications((current) => !current)} aria-label="Open notifications" aria-expanded={showNotifications}>
                 <Bell size={18} />
                 {unreadCount > 0 && <span>{unreadCount}</span>}
               </button>
@@ -911,7 +917,6 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
                 </span>
               </div>
             ) : null}
-            {headerAction}
           </div>
         </header>
         {notice ? (

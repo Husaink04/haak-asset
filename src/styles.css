@@ -342,8 +342,14 @@ header h1 {
 .header-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
+}
+
+.page-heading {
+  display: grid;
+  gap: 4px;
 }
 
 .notification-shell {
@@ -358,9 +364,19 @@ header h1 {
   place-items: center;
   border: 1px solid var(--haak-border);
   border-radius: 8px;
-  color: var(--haak-red);
-  background: #fff;
+  color: #475569;
+  background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  transition: border-color 180ms ease, color 180ms ease, background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.notification-bell-button:hover,
+.notification-bell-button.active {
+  color: var(--haak-red);
+  border-color: rgba(239, 31, 36, 0.24);
+  background: #fff;
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.1);
+  transform: translateY(-1px);
 }
 
 .notification-bell-button span,
@@ -393,15 +409,16 @@ header h1 {
   top: calc(100% + 12px);
   right: 0;
   z-index: 35;
-  width: min(520px, calc(100vw - 32px));
+  width: min(420px, calc(100vw - 32px));
   max-height: min(680px, calc(100vh - 120px));
   display: grid;
-  gap: 14px;
+  gap: 16px;
   padding: 18px;
   border: 1px solid var(--haak-border);
   border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 24px 70px rgba(2, 11, 24, 0.22);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 70px rgba(2, 11, 24, 0.18);
+  backdrop-filter: blur(14px);
 }
 
 .notification-center-head {
@@ -417,7 +434,8 @@ header h1 {
 
 .notification-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: auto auto;
+  justify-content: flex-end;
   gap: 10px;
 }
 
@@ -445,19 +463,18 @@ header h1 {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
-  min-width: 230px;
-  padding: 10px 12px;
+  gap: 8px;
+  min-width: 164px;
+  padding: 9px 12px;
   border: 1px solid var(--haak-border);
   border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  background: rgba(255, 255, 255, 0.94);
 }
 
 .admin-identity-chip svg {
-  width: 34px;
-  height: 34px;
-  padding: 8px;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
   border-radius: 999px;
 }
 
@@ -478,8 +495,9 @@ header h1 {
 .admin-identity-chip strong {
   display: block;
   color: var(--haak-ink);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.2;
+  text-transform: uppercase;
   overflow-wrap: anywhere;
 }
 
@@ -487,8 +505,7 @@ header h1 {
   display: block;
   margin-top: 2px;
   color: #64748b;
-  font-weight: 900;
-  text-transform: uppercase;
+  font-weight: 800;
 }
 
 .admin-identity-chip.online small {
@@ -869,7 +886,7 @@ aside {
   flex-direction: column;
   width: 100%;
   min-width: 0;
-  padding: 22px;
+  padding: 22px 18px;
   background:
     linear-gradient(180deg, #020b18 0%, #071326 62%, #101827 100%);
   color: #e2e8f0;
@@ -920,21 +937,25 @@ aside::-webkit-scrollbar-thumb {
 
 .logo {
   display: grid;
-  gap: 10px;
-  margin-bottom: 28px;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .logo img {
-  width: 168px;
+  width: 56px;
   max-width: 100%;
   height: auto;
 }
 
-.sidebar-collapsed .logo img {
-  width: 56px;
+.logo-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }
 
-.logo span {
+.logo-label {
   display: block;
   color: #e8edf5;
   font-size: 13px;
@@ -943,19 +964,36 @@ aside::-webkit-scrollbar-thumb {
   text-transform: uppercase;
 }
 
-.sidebar-collapsed .logo {
-  justify-items: center;
-  margin-bottom: 18px;
+.logo-copy small {
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 12px;
+  line-height: 1.3;
 }
 
-.sidebar-collapsed .logo-label,
+.sidebar-section-label {
+  margin: 6px 0 10px;
+  padding: 0 12px;
+  color: rgba(226, 232, 240, 0.48);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sidebar-collapsed .logo {
+  justify-items: center;
+  grid-template-columns: 1fr;
+  margin-bottom: 12px;
+}
+
+.sidebar-collapsed .logo-copy,
+.sidebar-collapsed .sidebar-section-label,
 .sidebar-collapsed .nav-label {
   display: none;
 }
 
 nav {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 nav button,
@@ -966,14 +1004,15 @@ nav button,
   overflow: hidden;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   border: 0;
   border-radius: 8px;
+  min-height: 46px;
   padding: 11px 12px;
-  color: #cbd5e1;
+  color: rgba(226, 232, 240, 0.82);
   background: transparent;
   text-align: left;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 nav button::before,
@@ -1004,7 +1043,7 @@ nav button:hover,
 .collapse-toggle:hover,
 .theme-toggle:hover {
   color: #fff;
-  background: rgba(239, 31, 36, 0.18);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 nav button:hover::before,
@@ -1017,6 +1056,7 @@ nav button.active::before,
 }
 
 nav button.active {
+  background: linear-gradient(90deg, rgba(239, 31, 36, 0.2), rgba(239, 31, 36, 0.04));
   box-shadow: inset 3px 0 0 var(--haak-red);
 }
 
@@ -1024,6 +1064,8 @@ nav button.active {
   margin-top: auto;
   display: grid;
   gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .collapse-toggle {
@@ -1037,7 +1079,7 @@ nav button.active {
   justify-content: center;
   padding: 0;
   border: 1px solid rgba(226, 232, 240, 0.16);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
   transition: background 180ms ease, border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
 }
 
@@ -1068,7 +1110,7 @@ nav button.active {
   width: 48px;
 }
 
-.sidebar-collapsed .logo span,
+.sidebar-collapsed .logo-copy,
 .sidebar-collapsed nav button span,
 .sidebar-collapsed .collapse-toggle span,
 .sidebar-collapsed .theme-toggle span,
@@ -1099,7 +1141,7 @@ nav button.active {
 }
 
 .workspace {
-  padding: 28px;
+  padding: 24px 28px 28px;
   min-width: 0;
   width: 100%;
 }
@@ -1108,8 +1150,10 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 20px;
+  margin-bottom: 22px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 header h1 {
@@ -3113,11 +3157,11 @@ dl dt {
     width: 150px;
   }
 
-  .logo span {
+  .logo-copy {
     align-self: center;
   }
 
-  .sidebar-collapsed .logo span,
+  .sidebar-collapsed .logo-copy,
   .sidebar-collapsed nav button span,
   .sidebar-collapsed .collapse-toggle span,
   .sidebar-collapsed .theme-toggle span,
