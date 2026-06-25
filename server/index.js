@@ -27,7 +27,7 @@ import { seedState } from "./seedState.js";
 dotenv.config();
 
 const app = express();
-const port = Number(process.env.API_PORT || 4000);
+const port = Number(process.env.PORT || process.env.API_PORT || 4000);
 const origin = process.env.CORS_ORIGIN || "http://127.0.0.1:5174,http://127.0.1:5174,http://localhost:5174";
 const jwtSecret = process.env.JWT_SECRET || "dev-only-change-this-secret";
 const __filename = fileURLToPath(import.meta.url);
