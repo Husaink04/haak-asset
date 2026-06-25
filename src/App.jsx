@@ -39,9 +39,9 @@ const USER_KEY = "haak-asset-management-user-v1";
 const VIEW_KEY = "haak-asset-management-view-v1";
 const PENDING_STATE_KEY = "haak-asset-management-pending-state-v1";
 const THEME_KEY = "haak-asset-management-theme-v1";
-const API_URL = import.meta.env.VITE_API_URL || "/api";
+const API_URL = normalizeApiUrl(import.meta.env?.VITE_API_URL);
 const DEFAULT_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-const MAX_UPLOAD_BYTES = Number(import.meta.env.VITE_MAX_UPLOAD_BYTES || DEFAULT_MAX_UPLOAD_BYTES);
+const MAX_UPLOAD_BYTES = Number(import.meta.env?.VITE_MAX_UPLOAD_BYTES || DEFAULT_MAX_UPLOAD_BYTES);
 const MAX_UPLOAD_MB = Math.max(1, Math.round(MAX_UPLOAD_BYTES / (1024 * 1024)));
 const PASSWORD_ROTATION_DAYS = 90;
 const FRIENDLY_ERROR_MESSAGE = "Something went wrong. Please try again.";
@@ -63,6 +63,15 @@ const DOCUMENT_UPLOAD_TYPES = new Set([
   "application/pdf",
   "application/msword"
 ]);
+
+function normalizeApiUrl(value) {
+  const raw = String(value || "").trim();
+  if (raw) return raw.replace(/\/+$/, "");
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}/api`;
+  }
+  return "/api";
+}
 
 const seedState = {
   settings: {
@@ -640,10 +649,11 @@ function unreadNotificationCount(notifications, user) {
 }
 
 function statusClass(status) {
-  return `badge ${status.replace("_", "-")}`;
+  return `badge ${String(status || "open").replace("_", "-")}`;
 }
 
 function formatStatusLabel(status) {
+  const safeStatus = String(status || "open");
   const labels = {
     in_service: "In service",
     in_review: "In review",
@@ -655,7 +665,7 @@ function formatStatusLabel(status) {
     repairing: "Repairing",
     repaired: "Repaired"
   };
-  return labels[status] || status.replace(/_/g, " ");
+  return labels[safeStatus] || safeStatus.replace(/_/g, " ");
 }
 
 function sortByNewestDate(items, key) {
@@ -2572,7 +2582,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
                   status,
                   lifecycle: [
                     ...asset.lifecycle,
-                    { id: uid("l"), type: "Status", description: `Status changed to ${status.replace("_", " ")}.`, createdAt: today() }
+                    { id: uid("l"), type: "Status", description: `Status changed to ${String(status || "open").replace("_", " ")}.`, createdAt: today() }
                   ]
                 }
               : asset
@@ -2605,7 +2615,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
           lifecycle.push({ id: uid("l"), type: "Assigned", description: `Reassigned to ${client?.companyName || "another company"}.`, createdAt: today() });
         }
         if (asset.status !== form.status) {
-          lifecycle.push({ id: uid("l"), type: "Status", description: `Status changed to ${form.status.replace("_", " ")}.`, createdAt: today() });
+          lifecycle.push({ id: uid("l"), type: "Status", description: `Status changed to ${String(form.status || "open").replace("_", " ")}.`, createdAt: today() });
         }
         lifecycle.push({ id: uid("l"), type: "Updated", description: `Asset details updated by ${user.role}.`, createdAt: today() });
         updatedAsset = { ...asset, ...form, clientId: user.role === "admin" ? form.clientId : asset.clientId, assetCode: nextAssetCode, lifecycle };
