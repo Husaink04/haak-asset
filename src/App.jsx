@@ -40,8 +40,9 @@ const VIEW_KEY = "haak-asset-management-view-v1";
 const PENDING_STATE_KEY = "haak-asset-management-pending-state-v1";
 const THEME_KEY = "haak-asset-management-theme-v1";
 const API_URL = import.meta.env.VITE_API_URL || "/api";
-const MAX_UPLOAD_MB = 10;
-const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+const DEFAULT_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = Number(import.meta.env.VITE_MAX_UPLOAD_BYTES || DEFAULT_MAX_UPLOAD_BYTES);
+const MAX_UPLOAD_MB = Math.max(1, Math.round(MAX_UPLOAD_BYTES / (1024 * 1024)));
 const PASSWORD_ROTATION_DAYS = 90;
 const FRIENDLY_ERROR_MESSAGE = "Something went wrong. Please try again.";
 const DEFAULT_ADMIN_ALERT_EMAIL = "huzefarampurawala9@gmail.com";
@@ -340,6 +341,12 @@ function friendlyErrorMessage(error, fallback = FRIENDLY_ERROR_MESSAGE) {
 function uploadErrorMessage(error) {
   if (error?.message?.startsWith("File must be") || error?.message?.startsWith("Images must be") || error?.message?.startsWith("Unsupported")) {
     return error.message;
+  }
+  if (error?.isApiError && error.message) {
+    return error.message;
+  }
+  if (error?.isNetworkError) {
+    return "Could not reach the upload server. Please restart the app and try again.";
   }
   return "Something went wrong while uploading. Please try again.";
 }

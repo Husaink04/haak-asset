@@ -28,7 +28,7 @@ dotenv.config();
 
 const app = express();
 const port = Number(process.env.API_PORT || 4000);
-const origin = process.env.CORS_ORIGIN || "http://127.0.0.1:5174,http://localhost:5174";
+const origin = process.env.CORS_ORIGIN || "http://127.0.0.1:5174,http://127.0.1:5174,http://localhost:5174";
 const jwtSecret = process.env.JWT_SECRET || "dev-only-change-this-secret";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,21 +37,12 @@ const distRoot = path.resolve(__dirname, "..", "dist");
 const emailLogoPath = path.resolve(__dirname, "..", "public", "email-logo.png");
 const mailFrom = process.env.MAIL_FROM || process.env.SMTP_USER || "HAAK Asset Management <no-reply@haak.local>";
 const emailLogoCid = "haak-email-logo@haak-assets";
+const maxUploadBytes = Number(process.env.MAX_UPLOAD_BYTES || 10 * 1024 * 1024);
+const maxUploadMb = Math.max(1, Math.round(maxUploadBytes / (1024 * 1024)));
 
 fs.mkdirSync(uploadRoot, { recursive: true });
 
-function wrapAsync(handler) {
-  if (typeof handler !== "function" || handler.length === 4) return handler;
-  return (request, response, next) => Promise.resolve(handler(request, response, next)).catch(next);
-}
-
-for (const method of ["get", "post", "put", "delete"]) {
-  const original = app[method].bind(app);
-  app[method] = (pathOrRoute, ...handlers) => original(pathOrRoute, ...handlers.map(wrapAsync));
-}
-
 app.disable("x-powered-by");
-app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS || 1));
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -92,7 +83,7 @@ const upload = multer({
     }
   }),
   limits: {
-    fileSize: Number(process.env.MAX_UPLOAD_BYTES || 10 * 1024 * 1024)
+    fileSize: maxUploadBytes
   },
   fileFilter: (_request, file, callback) => {
     const allowedTypes = new Set([
@@ -1203,16 +1194,12 @@ app.post("/api/assets", requireAuth, async (request, response) => {
   if (!state.clients.some((client) => client.id === clientId)) {
     return response.status(400).json({ error: "Company does not exist." });
   }
-  if (hasDuplicateAssetCode(state.assets, form.assetCode)) {
-    return response.status(409).json({ error: `Asset code ${form.assetCode} already exists.` });
-  }
 
   const asset = {
     id: form.id || uid("a"),
     assetCode: form.assetCode,
     clientId,
     name: form.name,
-    userName: form.userName || "",
     category: form.category || "",
     brand: form.brand || "",
     model: form.model || "",
@@ -1398,7 +1385,7 @@ app.post("/api/upload", requireAuth, (request, response) => {
   upload.single("file")(request, response, async (error) => {
     try {
       if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
-        return response.status(400).json({ error: "File must be 10 MB or smaller." });
+        return response.status(400).json({ error: `File must be ${maxUploadMb} MB or smaller.` });
       }
       if (error) {
         return response.status(400).json({ error: error.message || "A valid file is required." });
@@ -1429,7 +1416,8 @@ app.post("/api/upload", requireAuth, (request, response) => {
         url
       });
     } catch (uploadError) {
-      sendApiError(response, uploadError);
+      console.error(uploadError);
+      response.status(500).json({ error: "Upload failed while saving file details. Please try again." });
     }
   });
 });
@@ -1443,11 +1431,6 @@ if (process.env.NODE_ENV === "production" && fs.existsSync(distRoot)) {
     response.sendFile(path.join(distRoot, "index.html"));
   });
 }
-
-app.use((error, _request, response, next) => {
-  if (response.headersSent) return next(error);
-  return sendApiError(response, error);
-});
 
 ensureSchema()
   .then(() => {

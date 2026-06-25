@@ -273,6 +273,52 @@ body {
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
 }
 
+[data-theme="dark"] .notification-card {
+  color: #e5edf7;
+  border-color: #2c405c;
+  border-left-color: #ef4444;
+  background: #101b2c;
+}
+
+[data-theme="dark"] .notification-card.unread {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.2), #101b2c 38%);
+}
+
+[data-theme="dark"] .notification-card-head strong {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .notification-card-head small,
+[data-theme="dark"] .notification-card p {
+  color: #b7c4d6;
+}
+
+[data-theme="dark"] .notification-meta span {
+  color: #dbeafe;
+  background: #1b2a42;
+}
+
+[data-theme="dark"] .conversation-head,
+[data-theme="dark"] .issue-record {
+  border-color: #26364c;
+}
+
+[data-theme="dark"] .issue-record p,
+[data-theme="dark"] .issue-record-grid span {
+  color: #d8e2ef;
+  border-color: #2c405c;
+  background: #111d2f;
+}
+
+[data-theme="dark"] .issue-record-grid strong {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .appeal-timestamps {
+  color: #a8b5c7;
+}
+
 [data-theme="dark"] .password-policy-hint,
 [data-theme="dark"] .password-rotation-notice {
   color: #cbd5e1;
@@ -2758,6 +2804,7 @@ dl dt {
   border: 1px solid #e2e8f0;
   border-left: 4px solid #94a3b8;
   border-radius: 8px;
+  color: #172033;
   background: #fff;
 }
 
@@ -2800,12 +2847,18 @@ dl dt {
 }
 
 .notification-card-head strong {
+  color: #172033;
   line-height: 1.3;
+}
+
+.notification-card-head small {
+  color: #64748b;
+  white-space: nowrap;
 }
 
 .notification-card p {
   margin: 6px 0 10px;
-  color: #52616f;
+  color: #475569;
   line-height: 1.45;
 }
 
@@ -2818,8 +2871,8 @@ dl dt {
 .notification-meta span {
   padding: 4px 8px;
   border-radius: 999px;
-  background: #f1f5f9;
-  color: #475569;
+  background: #eef2f7;
+  color: #334155;
   font-size: 12px;
   font-weight: 800;
   text-transform: capitalize;
@@ -2906,7 +2959,7 @@ dl dt {
   padding: 16px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  color: #334155;
+  color: #1f2937;
   background: #f8fafc;
   line-height: 1.55;
 }
@@ -2923,13 +2976,13 @@ dl dt {
   padding: 12px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  color: #64748b;
+  color: #52627a;
   background: #fff;
   text-transform: capitalize;
 }
 
 .issue-record-grid strong {
-  color: var(--haak-ink);
+  color: #0f172a;
   font-size: 12px;
   text-transform: uppercase;
 }
