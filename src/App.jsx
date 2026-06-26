@@ -3678,6 +3678,7 @@ function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveC
   const pendingRequests = (data.credentialRequests || []).filter((request) => request.status === "pending");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [adminAlertEmail, setAdminAlertEmail] = useState(data.settings?.adminAlertEmail || DEFAULT_ADMIN_ALERT_EMAIL);
+  const [adminEmailStatus, setAdminEmailStatus] = useState(null);
   const [credentialSaveState, setCredentialSaveState] = useState({});
   const [credentialDrafts, setCredentialDrafts] = useState(() =>
     Object.fromEntries(clientUsers.map((user) => [user.id, { email: user.email, password: "" }]))
@@ -3708,6 +3709,22 @@ function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveC
     if (changed) setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
   }
 
+  function submitAdminAlertEmail(event) {
+    event.preventDefault();
+    const updated = onUpdateAdminAlertEmail(adminAlertEmail);
+    setAdminEmailStatus(updated
+      ? { status: "success", message: "Alert email saved." }
+      : { status: "error", message: "Enter a valid admin alert email address." });
+  }
+
+  async function submitAdminAlertTest() {
+    setAdminEmailStatus({ status: "saving", message: "Sending test email..." });
+    const sent = await onSendAdminAlertTest(adminAlertEmail);
+    setAdminEmailStatus(sent
+      ? { status: "success", message: `Test email sent to ${adminAlertEmail.trim()}.` }
+      : { status: "error", message: "Test email was not sent. Check SMTP settings and Railway logs." });
+  }
+
   async function submitClientCredentials(userId, clientId, nextEmail, nextPassword) {
     setCredentialSaveState((current) => ({ ...current, [userId]: { status: "saving", message: "Saving..." } }));
     const updated = await onUpdateClientCredentials(clientId, nextEmail, nextPassword);
@@ -3735,15 +3752,15 @@ function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveC
             <h2>Admin alert email</h2>
           </div>
         </div>
-        <form className="form-grid" onSubmit={(event) => {
-          event.preventDefault();
-          onUpdateAdminAlertEmail(adminAlertEmail);
-        }}>
+        <form className="form-grid" onSubmit={submitAdminAlertEmail}>
           <input type="email" placeholder="admin@example.com" value={adminAlertEmail} onChange={(event) => setAdminAlertEmail(event.target.value)} required />
           <div className="field-grid">
             <button className="primary inline-action" type="submit"><Save size={16} /> Save alert email</button>
-            <button className="secondary inline-action" type="button" onClick={() => onSendAdminAlertTest(adminAlertEmail)}><Mail size={16} /> Send test email</button>
+            <button className="secondary inline-action" type="button" disabled={adminEmailStatus?.status === "saving"} onClick={submitAdminAlertTest}>
+              <Mail size={16} /> {adminEmailStatus?.status === "saving" ? "Sending..." : "Send test email"}
+            </button>
           </div>
+          {adminEmailStatus?.message && <small className={`settings-save-status ${adminEmailStatus.status}`}>{adminEmailStatus.message}</small>}
         </form>
       </div>
       <div className="panel">
@@ -4180,7 +4197,7 @@ export default function App() {
     const nextEmail = email.trim();
     if (!isValidEmail(nextEmail)) {
       notify("Enter a valid admin alert email address.", "error");
-      return;
+      return false;
     }
     setData((current) => ({
       ...current,
@@ -4190,13 +4207,14 @@ export default function App() {
       }
     }));
     notify("Admin alert email updated.");
+    return true;
   }
 
   async function sendAdminAlertTest(email) {
     const nextEmail = email.trim();
     if (!isValidEmail(nextEmail)) {
       notify("Enter a valid admin alert email address.", "error");
-      return;
+      return false;
     }
     try {
       const result = await apiRequest("/email/admin-alert/test", {
@@ -4205,8 +4223,10 @@ export default function App() {
       });
       if (result.result?.sent > 0) {
         notify(`Test email sent to ${nextEmail}.`);
+        return true;
       } else {
         notify("Test email was not sent. Check SMTP settings.", "warning");
+        return false;
       }
     } catch (error) {
       if (error?.status === 404) {
@@ -4214,6 +4234,7 @@ export default function App() {
       } else {
         notify(friendlyErrorMessage(error), "error");
       }
+      return false;
     }
   }
 
