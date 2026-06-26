@@ -142,10 +142,13 @@ function sendApiError(response, error) {
 }
 
 function isEmailEnabled() {
-  return Boolean(process.env.RESEND_API_KEY || (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS));
+  return Boolean(process.env.BREVO_API_KEY || process.env.RESEND_API_KEY || (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS));
 }
 
 function smtpConfigStatus() {
+  if (process.env.BREVO_API_KEY) {
+    return { configured: true, mode: "brevo", missing: [] };
+  }
   if (process.env.RESEND_API_KEY) {
     return { configured: true, mode: "resend", missing: [] };
   }
@@ -186,6 +189,50 @@ function getMailTransporter() {
 }
 
 async function sendMailUnified(options) {
+  if (process.env.BREVO_API_KEY) {
+    const fromEmail = process.env.MAIL_FROM || 'no-reply@haak.local';
+    const recipients = Array.isArray(options.to) ? options.to : [options.to];
+
+    const brevoAttachments = [];
+    if (options.attachments && Array.isArray(options.attachments)) {
+      for (const att of options.attachments) {
+        if (att.path && fs.existsSync(att.path)) {
+          const content = fs.readFileSync(att.path).toString("base64");
+          brevoAttachments.push({
+            content,
+            name: att.filename
+          });
+        }
+      }
+    }
+
+    const payload = {
+      sender: { email: fromEmail, name: "HAAK Asset Management" },
+      to: recipients.map(email => ({ email })),
+      subject: options.subject,
+      textContent: options.text,
+      htmlContent: options.html
+    };
+    if (brevoAttachments.length > 0) {
+      payload.attachment = brevoAttachments;
+    }
+
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': process.env.BREVO_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.message || `Brevo API failed with status ${response.status}`);
+    }
+    return { sent: recipients.length, failed: 0, skipped: false, messageId: body.messageId };
+  }
+
   if (process.env.RESEND_API_KEY) {
     const fromEmail = process.env.MAIL_FROM || 'onboarding@resend.dev';
     const recipients = Array.isArray(options.to) ? options.to : [options.to];
@@ -1037,7 +1084,7 @@ app.post("/api/email/admin-alert/test", requireAuth, requireAdmin, async (reques
   if (!smtp.configured) {
     return response.status(503).json({
       error: "Email delivery is not configured on the server.",
-      detail: "Set RESEND_API_KEY for Resend delivery, or set SMTP_HOST, SMTP_USER, SMTP_PASS in the environment."
+      detail: "Set BREVO_API_KEY for Brevo, RESEND_API_KEY for Resend, or SMTP_HOST, SMTP_USER, SMTP_PASS in the environment."
     });
   }
   try {
