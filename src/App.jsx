@@ -309,6 +309,9 @@ function clearStoredSession() {
 async function apiRequest(path, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
   const isFormData = options.body instanceof FormData;
+  const { timeoutMs = 30000, ...fetchOptions } = options;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   let response;
   try {
     response = await fetch(`${API_URL}${path}`, {
@@ -317,22 +320,33 @@ async function apiRequest(path, options = {}) {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(options.headers || {})
       },
-      ...options
+      ...fetchOptions,
+      signal: fetchOptions.signal || controller.signal
     });
   } catch (error) {
-    const friendlyError = new Error(FRIENDLY_ERROR_MESSAGE);
+    const friendlyError = new Error(error?.name === "AbortError" ? "The server took too long to respond. Please try again." : FRIENDLY_ERROR_MESSAGE);
     friendlyError.isNetworkError = true;
     friendlyError.cause = error;
     throw friendlyError;
+  } finally {
+    window.clearTimeout(timeout);
   }
 
-  const body = await response.json().catch(() => ({}));
+  const responseText = await response.text().catch(() => "");
+  const body = responseText ? (() => {
+    try {
+      return JSON.parse(responseText);
+    } catch {
+      return { error: responseText.slice(0, 180) };
+    }
+  })() : {};
   if (!response.ok) {
     if (response.status === 401) {
       clearStoredSession();
       window.setTimeout(() => window.location.reload(), 0);
     }
-    const error = new Error(body.error || "API request failed.");
+    const statusMessage = response.statusText ? `Request failed (${response.status} ${response.statusText}).` : `Request failed (${response.status}).`;
+    const error = new Error(body.error || statusMessage);
     error.status = response.status;
     error.detail = body.detail;
     error.isApiError = true;
@@ -1047,28 +1061,67 @@ function CollapsiblePanel({ eyebrow, title, badge, children, defaultOpen = false
 }
 
 function CompanyLogo({ client }) {
-  if (client.logoUrl) {
-    return <img className="company-logo" src={resolveMediaUrl(client.logoUrl)} alt={`${client.companyName} logo`} />;
-  }
-
-  return (
+  const fallback = (
     <div className="company-mark">
       <Building2 size={18} />
     </div>
+  );
+
+  if (client.logoUrl) {
+    return (
+      <ImageWithFallback
+        className="company-logo"
+        src={client.logoUrl}
+        alt={`${client.companyName} logo`}
+        fallback={fallback}
+      />
+    );
+  }
+
+  return fallback;
+}
+
+function ImageWithFallback({ src, alt, className = "", fallback }) {
+  const resolvedSrc = resolveMediaUrl(src);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [resolvedSrc]);
+
+  if (!resolvedSrc || failed) return fallback;
+
+  return (
+    <img
+      className={className}
+      src={resolvedSrc}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+    />
   );
 }
 
 function AssetVisual({ asset, className = "" }) {
   const imageUrl = asset.images?.[0];
-  if (imageUrl) {
-    return <img className={className} src={resolveMediaUrl(imageUrl)} alt={asset.name} />;
-  }
-
-  return (
+  const fallback = (
     <div className={`asset-placeholder ${className}`.trim()} aria-hidden="true">
       <Camera size={22} />
     </div>
   );
+  if (imageUrl) {
+    return (
+      <ImageWithFallback
+        className={className}
+        src={imageUrl}
+        alt={asset.name}
+        fallback={fallback}
+      />
+    );
+  }
+
+  return fallback;
 }
 
 function CompanyForm({ onCreate, className = "" }) {
@@ -1676,6 +1729,17 @@ function CompaniesPage({ user, data, setData, notify }) {
   const totalAssets = companyDirectory.reduce((sum, client) => sum + client.assetCount, 0);
 
   async function createCompany(form) {
+    const clientEmail = form.email.trim().toLowerCase();
+    const loginEmail = form.loginEmail.trim().toLowerCase();
+    if (data.clients.some((client) => String(client.email || "").trim().toLowerCase() === clientEmail)) {
+      notify("A company with this client email already exists.", "error");
+      return false;
+    }
+    if (data.users.some((item) => String(item.email || "").trim().toLowerCase() === loginEmail)) {
+      notify("That login email is already in use.", "error");
+      return false;
+    }
+
     try {
       const payload = {
       companyName: form.companyName,
@@ -4261,7 +4325,8 @@ export default function App() {
     try {
       const result = await apiRequest("/email/admin-alert/test", {
         method: "POST",
-        body: JSON.stringify({ email: nextEmail })
+        body: JSON.stringify({ email: nextEmail }),
+        timeoutMs: 20000
       });
       if (result.result?.sent > 0) {
         notify(`Test email sent to ${nextEmail}.`);

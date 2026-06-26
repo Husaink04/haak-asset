@@ -39,6 +39,7 @@ const mailFrom = process.env.MAIL_FROM || process.env.SMTP_USER || "HAAK Asset M
 const emailLogoCid = "haak-email-logo@haak-assets";
 const maxUploadBytes = Number(process.env.MAX_UPLOAD_BYTES || 10 * 1024 * 1024);
 const maxUploadMb = Math.max(1, Math.round(maxUploadBytes / (1024 * 1024)));
+const smtpTimeoutMs = Number(process.env.SMTP_TIMEOUT_MS || 15000);
 
 fs.mkdirSync(uploadRoot, { recursive: true });
 
@@ -168,6 +169,9 @@ function getMailTransporter() {
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT || 587),
       secure: String(process.env.SMTP_SECURE || "false") === "true",
+      connectionTimeout: smtpTimeoutMs,
+      greetingTimeout: smtpTimeoutMs,
+      socketTimeout: smtpTimeoutMs,
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
@@ -1012,6 +1016,19 @@ app.post("/api/companies", requireAuth, requireAdmin, async (request, response) 
   }
   if (!validateEmail(form.email) || (form.loginEmail && !validateEmail(form.loginEmail))) {
     return response.status(400).json({ error: "Enter a valid email address." });
+  }
+
+  const companyEmail = String(form.email || "").trim().toLowerCase();
+  const loginEmail = String(form.loginEmail || "").trim().toLowerCase();
+  const duplicateCompany = state.clients.find((client) => String(client.email || "").trim().toLowerCase() === companyEmail);
+  if (duplicateCompany) {
+    return response.status(409).json({ error: "A company with this client email already exists." });
+  }
+  if (loginEmail) {
+    const duplicateLogin = state.users.find((user) => String(user.email || "").trim().toLowerCase() === loginEmail);
+    if (duplicateLogin) {
+      return response.status(409).json({ error: "That login email is already in use." });
+    }
   }
 
   const clientId = form.id || uid("c");

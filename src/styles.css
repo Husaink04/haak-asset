@@ -3595,9 +3595,13 @@ dl dt {
   }
 
   .logo {
-    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-columns: minmax(96px, 112px) minmax(0, 1fr);
     align-items: center;
     margin-bottom: 0;
+  }
+
+  .logo img {
+    width: min(112px, 100%);
   }
 
   .sidebar-collapsed .logo {
@@ -3886,7 +3890,19 @@ dl dt {
   }
 
   .asset-row {
-    grid-template-columns: 48px 1fr;
+    grid-template-columns: 64px 1fr;
+  }
+
+  .asset-row img,
+  .asset-row .asset-placeholder {
+    width: 64px;
+    height: 64px;
+  }
+
+  .company-logo,
+  .company-mark {
+    width: 50px;
+    height: 50px;
   }
 
   .asset-detail-head,
@@ -3919,7 +3935,7 @@ dl dt {
   }
 
   .company-row {
-    grid-template-columns: 44px 1fr;
+    grid-template-columns: 50px 1fr;
   }
 
   .company-row .badge,
