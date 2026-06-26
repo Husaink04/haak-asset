@@ -1688,7 +1688,7 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
   );
 }
 
-function CompaniesPage({ user, data, setData, notify }) {
+function CompaniesPage({ user, data, setData, setDataState, notify }) {
   const [selectedId, setSelectedId] = useState(data.clients[0]?.id);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -4648,7 +4648,7 @@ export default function App() {
         </div>
       )}
       {view === "dashboard" && <Dashboard user={user} data={data} scopedAssets={scopedAssets} scopedAppeals={scopedAppeals} clientBrand={clientBrand} setData={setData} />}
-      {view === "companies" && user.role === "admin" && <CompaniesPage user={user} data={data} setData={setData} notify={notify} />}
+      {view === "companies" && user.role === "admin" && <CompaniesPage user={user} data={data} setData={setData} setDataState={setDataState} notify={notify} />}
       {view === "assets" && <AssetsPage user={user} data={data} scopedAssets={scopedAssets} setData={setData} notify={notify} onAddEngineer={() => setShowEngineerModal(true)} />}
       {view === "appeals" && <AppealsPage user={user} data={data} scopedAppeals={scopedAppeals} scopedAssets={scopedAssets} setData={setData} notify={notify} />}
       {view === "service" && user.role === "admin" && <ServicePage user={user} data={data} setData={setData} notify={notify} />}
