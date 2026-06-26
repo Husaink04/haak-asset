@@ -15,10 +15,12 @@ import {
   LockKeyhole,
   LogOut,
   Mail,
+  Menu,
   MessageSquare,
   Moon,
   Paperclip,
   Plus,
+  RefreshCw,
   Save,
   Search,
   ShieldCheck,
@@ -841,8 +843,9 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(() => window.matchMedia("(max-width: 1180px)").matches);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const isDarkTheme = theme === "dark";
-  const shellCollapsed = sidebarCollapsed || isCompactViewport;
+  const shellCollapsed = sidebarCollapsed && !isCompactViewport;
   const nav = user.role === "admin"
     ? [
         ["dashboard", "Dashboard", Archive],
@@ -876,22 +879,58 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
     setShowNotifications(false);
   }, [view]);
 
+  useEffect(() => {
+    if (!isCompactViewport) setMobileNavOpen(false);
+  }, [isCompactViewport]);
+
+  async function hardRefresh() {
+    try {
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.update()));
+      }
+      if ("caches" in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+      }
+    } finally {
+      window.location.reload();
+    }
+  }
+
+  function selectView(nextView) {
+    setView(nextView);
+    if (isCompactViewport) setMobileNavOpen(false);
+  }
+
   return (
     <>
       <Toaster richColors closeButton position="top-right" />
-      <div className={`app-shell ${user.role}-shell ${shellCollapsed ? "sidebar-collapsed" : ""}`}>
+      <div className={`app-shell ${user.role}-shell ${shellCollapsed ? "sidebar-collapsed" : ""} ${isCompactViewport ? "mobile-shell" : ""} ${mobileNavOpen ? "mobile-nav-open" : "mobile-nav-closed"}`}>
       <aside>
-        <div className="logo">
-          <img src="/haak-logo-transparent.png" alt="HAAK INFOTECH" />
-          <div className="logo-copy">
-            <strong className="logo-label">Asset Management</strong>
-            <small>{user.role === "admin" ? "Admin workspace" : "Client workspace"}</small>
+        <div className="sidebar-top">
+          <div className="logo">
+            <img src="/haak-logo-transparent.png" alt="HAAK INFOTECH" />
+            <div className="logo-copy">
+              <strong className="logo-label">Asset Management</strong>
+              <small>{user.role === "admin" ? "Admin workspace" : "Client workspace"}</small>
+            </div>
           </div>
+          <button
+            className="mobile-menu-toggle"
+            type="button"
+            onClick={() => setMobileNavOpen((current) => !current)}
+            aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileNavOpen}
+          >
+            <Menu size={18} />
+            <span>{mobileNavOpen ? "Close" : "Menu"}</span>
+          </button>
         </div>
         <div className="sidebar-section-label">Main</div>
         <nav>
           {nav.map(([id, label, Icon]) => (
-            <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)} title={shellCollapsed ? label : undefined} aria-label={label}>
+            <button key={id} className={view === id ? "active" : ""} onClick={() => selectView(id)} title={shellCollapsed ? label : undefined} aria-label={label}>
               <Icon size={18} />
               <span className="nav-label">{label}</span>
             </button>
@@ -902,14 +941,13 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
           <button
             className="collapse-toggle"
             type="button"
-            onClick={() => setSidebarCollapsed((current) => !current)}
+            onClick={() => isCompactViewport ? setMobileNavOpen((current) => !current) : setSidebarCollapsed((current) => !current)}
             aria-label={shellCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={shellCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!shellCollapsed}
-            disabled={isCompactViewport}
+            aria-expanded={isCompactViewport ? mobileNavOpen : !shellCollapsed}
           >
-            {shellCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-            <span>{shellCollapsed ? "Expand" : "Collapse"}</span>
+            {(isCompactViewport ? !mobileNavOpen : shellCollapsed) ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            <span>{isCompactViewport ? (mobileNavOpen ? "Collapse" : "Expand") : (shellCollapsed ? "Expand" : "Collapse")}</span>
           </button>
           <button
             className="theme-toggle"
@@ -932,6 +970,10 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
           </div>
           <div className="header-actions">
             {headerAction}
+            <button className="refresh-button" type="button" onClick={hardRefresh} aria-label="Hard refresh app" title="Hard refresh app">
+              <RefreshCw size={18} />
+              <span>Refresh</span>
+            </button>
             <div className="notification-shell">
               <button className={`notification-bell-button ${showNotifications ? "active" : ""}`} type="button" onClick={() => setShowNotifications((current) => !current)} aria-label="Open notifications" aria-expanded={showNotifications}>
                 <Bell size={18} />

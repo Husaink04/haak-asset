@@ -263,10 +263,17 @@ body {
 }
 
 [data-theme="dark"] .notification-bell-button,
-[data-theme="dark"] .notification-center {
+[data-theme="dark"] .notification-center,
+[data-theme="dark"] .refresh-button {
   color: #f8fafc;
   border-color: #334155;
   background: #0d1726;
+}
+
+[data-theme="dark"] .refresh-button:hover {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.54);
+  background: #111c2d;
 }
 
 [data-theme="dark"] .notification-center {
@@ -472,6 +479,43 @@ header h1 {
   background: #fff;
   box-shadow: 0 16px 28px rgba(15, 23, 42, 0.1);
   transform: translateY(-1px);
+}
+
+.refresh-button,
+.mobile-menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--haak-border);
+  border-radius: 8px;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: #334155;
+  background: rgba(255, 255, 255, 0.92);
+  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.refresh-button:hover,
+.mobile-menu-toggle:hover {
+  color: var(--haak-red);
+  border-color: rgba(239, 31, 36, 0.24);
+  background: #fff;
+}
+
+.mobile-menu-toggle {
+  display: none;
+  color: #f8fafc;
+  border-color: rgba(226, 232, 240, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+
+.mobile-menu-toggle:hover {
+  color: #fff;
+  border-color: rgba(239, 31, 36, 0.52);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .notification-bell-button span,
@@ -1029,6 +1073,11 @@ aside::-webkit-scrollbar-thumb {
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
+}
+
+.sidebar-top {
+  display: grid;
+  gap: 12px;
 }
 
 .logo img {
@@ -3525,7 +3574,7 @@ dl dt {
     position: static;
     height: auto;
     padding: 16px;
-    gap: 14px;
+    gap: 12px;
   }
 
   .app-shell.sidebar-collapsed {
@@ -3534,6 +3583,15 @@ dl dt {
 
   .sidebar-collapsed aside {
     padding: 16px;
+  }
+
+  .sidebar-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .mobile-menu-toggle {
+    display: inline-flex;
   }
 
   .logo {
@@ -3554,6 +3612,12 @@ dl dt {
     align-self: center;
   }
 
+  .mobile-shell.mobile-nav-closed .sidebar-section-label,
+  .mobile-shell.mobile-nav-closed nav,
+  .mobile-shell.mobile-nav-closed .sidebar-actions {
+    display: none;
+  }
+
   .sidebar-collapsed .logo-copy,
   .sidebar-collapsed nav button span,
   .sidebar-collapsed .collapse-toggle span,
@@ -3568,7 +3632,7 @@ dl dt {
   }
 
   nav {
-    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
     gap: 8px;
   }
 
@@ -3589,6 +3653,7 @@ dl dt {
     grid-template-columns: repeat(3, minmax(0, auto));
     align-items: center;
     justify-content: start;
+    padding-top: 12px;
   }
 
   .logout,
@@ -3638,6 +3703,10 @@ dl dt {
     justify-content: space-between;
   }
 
+  .refresh-button {
+    min-width: 118px;
+  }
+
   .notification-center {
     right: auto;
     left: 0;
@@ -3673,7 +3742,7 @@ dl dt {
   .brand-panel,
   .login-grid,
   .workspace {
-    padding: 18px;
+    padding: 16px;
   }
 
   .brand-panel {
@@ -3716,12 +3785,35 @@ dl dt {
   header {
     align-items: flex-start;
     flex-direction: column;
+    gap: 14px;
+    margin-bottom: 16px;
   }
 
   .header-actions,
   .app-toast {
     width: 100%;
     margin-left: 0;
+  }
+
+  .header-actions {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .refresh-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .notification-bell-button {
+    width: 48px;
+    height: 48px;
+  }
+
+  .admin-identity-chip {
+    min-width: 0;
+    width: 100%;
   }
 
   .client-brand-chip,
@@ -3732,6 +3824,7 @@ dl dt {
 
   .sidebar-actions {
     grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .notification-actions {
@@ -3753,6 +3846,13 @@ dl dt {
   .collapse-toggle {
     min-height: 44px;
     padding: 10px;
+    gap: 8px;
+  }
+
+  nav button {
+    align-items: center;
+    font-size: 13px;
+    line-height: 1.2;
   }
 
   .sidebar-actions,
@@ -3763,7 +3863,7 @@ dl dt {
 
   .theme-toggle {
     width: 44px;
-    justify-self: center;
+    justify-self: start;
     justify-content: center;
     padding: 0;
   }
