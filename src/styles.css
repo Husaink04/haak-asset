@@ -326,6 +326,52 @@ body {
   background: #111c2d;
 }
 
+[data-theme="dark"] .companies-hero-copy p,
+[data-theme="dark"] .company-overview-notes p,
+[data-theme="dark"] .companies-hero-stat span,
+[data-theme="dark"] .company-health-card span,
+[data-theme="dark"] .company-overview-card span {
+  color: #b7c4d6;
+}
+
+[data-theme="dark"] .companies-hero-stat,
+[data-theme="dark"] .company-health-card,
+[data-theme="dark"] .company-overview-card,
+[data-theme="dark"] .company-overview-brand,
+[data-theme="dark"] .company-editor-summary,
+[data-theme="dark"] .company-editor-section,
+[data-theme="dark"] .review-box {
+  color: #e5edf7;
+  border-color: #29405f;
+  background: #101b2c;
+}
+
+[data-theme="dark"] .companies-hero-stat strong,
+[data-theme="dark"] .company-health-card strong,
+[data-theme="dark"] .company-overview-card strong,
+[data-theme="dark"] .company-overview-notes strong,
+[data-theme="dark"] .company-directory-row strong,
+[data-theme="dark"] .company-overview-brand strong,
+[data-theme="dark"] .company-logo-preview strong,
+[data-theme="dark"] .review-box strong {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .companies-hero-stat small,
+[data-theme="dark"] .company-health-card small,
+[data-theme="dark"] .company-overview-card small,
+[data-theme="dark"] .company-directory-meta small,
+[data-theme="dark"] .company-directory-copy small,
+[data-theme="dark"] .company-overview-brand small,
+[data-theme="dark"] .company-logo-preview small,
+[data-theme="dark"] .review-box small {
+  color: #a8b5c7;
+}
+
+[data-theme="dark"] .company-overview-notes {
+  border-top-color: #29405f;
+}
+
 [data-theme="dark"] .modal-backdrop {
   background: rgba(2, 6, 23, 0.76);
   backdrop-filter: blur(5px);
@@ -2657,6 +2703,35 @@ dl dt {
 .settings-row .password-rotation-notice {
   grid-column: 1 / -1;
   margin-bottom: 0;
+}
+
+.settings-save-status {
+  grid-column: 1 / -1;
+  font-weight: 800;
+}
+
+.settings-save-status.success {
+  color: #047857;
+}
+
+.settings-save-status.error {
+  color: #b91c1c;
+}
+
+.settings-save-status.saving {
+  color: #92400e;
+}
+
+[data-theme="dark"] .settings-save-status.success {
+  color: #86efac;
+}
+
+[data-theme="dark"] .settings-save-status.error {
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .settings-save-status.saving {
+  color: #fde68a;
 }
 
 .password-policy-hint strong {

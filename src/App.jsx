@@ -3678,6 +3678,7 @@ function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveC
   const pendingRequests = (data.credentialRequests || []).filter((request) => request.status === "pending");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [adminAlertEmail, setAdminAlertEmail] = useState(data.settings?.adminAlertEmail || DEFAULT_ADMIN_ALERT_EMAIL);
+  const [credentialSaveState, setCredentialSaveState] = useState({});
   const [credentialDrafts, setCredentialDrafts] = useState(() =>
     Object.fromEntries(clientUsers.map((user) => [user.id, { email: user.email, password: "" }]))
   );
@@ -3705,6 +3706,24 @@ function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveC
     }
     const changed = await onChangeAdminPassword(passwordForm.currentPassword, passwordForm.newPassword);
     if (changed) setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  }
+
+  async function submitClientCredentials(userId, clientId, nextEmail, nextPassword) {
+    setCredentialSaveState((current) => ({ ...current, [userId]: { status: "saving", message: "Saving..." } }));
+    const updated = await onUpdateClientCredentials(clientId, nextEmail, nextPassword);
+    if (updated) {
+      setCredentialSaveState((current) => ({ ...current, [userId]: { status: "success", message: "Credentials updated." } }));
+      updateDraft(userId, "password", "");
+      window.setTimeout(() => {
+        setCredentialSaveState((current) => {
+          if (current[userId]?.status !== "success") return current;
+          const { [userId]: _removed, ...rest } = current;
+          return rest;
+        });
+      }, 3200);
+    } else {
+      setCredentialSaveState((current) => ({ ...current, [userId]: { status: "error", message: "Could not update. Check the message above and try again." } }));
+    }
   }
 
   return (
@@ -3756,6 +3775,8 @@ function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveC
           {clientUsers.map((user) => {
             const client = data.clients.find((item) => item.id === user.clientId);
             const draft = credentialDrafts[user.id] || { email: user.email, password: "" };
+            const saveState = credentialSaveState[user.id];
+            const isSaving = saveState?.status === "saving";
             return (
               <div key={user.id} className="settings-row">
                 <div>
@@ -3764,8 +3785,11 @@ function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveC
                 </div>
                 <input type="email" placeholder="Login email" value={draft.email} onChange={(event) => updateDraft(user.id, "email", event.target.value)} />
                 <input type="password" placeholder="New password" value={draft.password} onChange={(event) => updateDraft(user.id, "password", event.target.value)} />
-                <button className="primary" type="button" onClick={() => onUpdateClientCredentials(user.clientId, draft.email, draft.password)}>Save</button>
+                <button className="primary" type="button" disabled={isSaving} onClick={() => submitClientCredentials(user.id, user.clientId, draft.email, draft.password)}>
+                  {isSaving ? "Saving..." : "Save"}
+                </button>
                 <PasswordRotationNotice user={user} />
+                {saveState?.message && <small className={`settings-save-status ${saveState.status}`}>{saveState.message}</small>}
                 {draft.password && <PasswordPolicyHint password={draft.password} />}
               </div>
             );
@@ -4229,8 +4253,10 @@ export default function App() {
       clearPendingState();
       setPendingSync(false);
       notify("Client login credentials updated.");
+      return true;
     } catch (error) {
       notify(friendlyErrorMessage(error), "error");
+      return false;
     }
   }
 
