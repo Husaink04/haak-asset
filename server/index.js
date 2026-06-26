@@ -142,28 +142,32 @@ function sendApiError(response, error) {
 }
 
 function isEmailEnabled() {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  return Boolean(process.env.RESEND_API_KEY || (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS));
 }
 
 function smtpConfigStatus() {
+  if (process.env.RESEND_API_KEY) {
+    return { configured: true, mode: "resend", missing: [] };
+  }
   const missing = [];
   if (!process.env.SMTP_HOST) missing.push("SMTP_HOST");
   if (!process.env.SMTP_USER) missing.push("SMTP_USER");
   if (!process.env.SMTP_PASS) missing.push("SMTP_PASS");
   return {
     configured: missing.length === 0,
+    mode: "smtp",
     missing
   };
 }
 
 function smtpErrorDetail(error) {
-  return error?.response || error?.message || error?.code || error?.responseCode || "SMTP_ERROR";
+  return error?.response || error?.message || error?.code || error?.responseCode || "EMAIL_ERROR";
 }
 
 let mailTransporter = null;
 
 function getMailTransporter() {
-  if (!isEmailEnabled()) return null;
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
   if (!mailTransporter) {
     mailTransporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -179,6 +183,80 @@ function getMailTransporter() {
     });
   }
   return mailTransporter;
+}
+
+async function sendMailUnified(options) {
+  if (process.env.RESEND_API_KEY) {
+    const fromEmail = process.env.MAIL_FROM || 'onboarding@resend.dev';
+    const recipients = Array.isArray(options.to) ? options.to : [options.to];
+
+    const resendAttachments = [];
+    if (options.attachments && Array.isArray(options.attachments)) {
+      for (const att of options.attachments) {
+        if (att.path && fs.existsSync(att.path)) {
+          const content = fs.readFileSync(att.path).toString("base64");
+          resendAttachments.push({
+            content,
+            filename: att.filename,
+            cid: att.cid
+          });
+        }
+      }
+    }
+
+    const payload = {
+      from: fromEmail,
+      to: recipients,
+      subject: options.subject,
+      text: options.text,
+      html: options.html
+    };
+    if (resendAttachments.length > 0) {
+      payload.attachments = resendAttachments;
+    }
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.message || `Resend API failed with status ${response.status}`);
+    }
+    return { sent: recipients.length, failed: 0, skipped: false, id: body.id };
+  }
+
+  const transporter = getMailTransporter();
+  if (!transporter) {
+    return { sent: 0, failed: 0, skipped: true };
+  }
+
+  const recipients = Array.isArray(options.to) ? options.to : [options.to];
+  const mailFrom = process.env.MAIL_FROM || process.env.SMTP_USER || "HAAK Asset Management <no-reply@haak.local>";
+  
+  const tasks = recipients.map((to) => 
+    transporter.sendMail({
+      from: mailFrom,
+      to,
+      subject: options.subject,
+      text: options.text,
+      html: options.html,
+      attachments: options.attachments || []
+    })
+  );
+
+  const results = await Promise.allSettled(tasks);
+  const failed = results.filter((r) => r.status === "rejected");
+  if (failed.length > 0) {
+    console.warn(`SMTP email failed for ${failed.length} recipient(s).`);
+    failed.forEach((result) => console.warn(result.reason?.message || result.reason));
+  }
+  return { sent: recipients.length - failed.length, failed: failed.length, skipped: false };
 }
 
 function escapeHtml(value) {
@@ -459,9 +537,8 @@ function buildCredentialsUpdatedEmailHtml(client, user, newEmail, newPassword, a
 }
 
 async function sendClientWelcomeEmail(client, user, plainPassword) {
-  const transporter = getMailTransporter();
-  if (!transporter) {
-    console.warn("Welcome email skipped because SMTP is not configured.");
+  if (!isEmailEnabled()) {
+    console.warn("Welcome email skipped because SMTP/Resend is not configured.");
     return { sent: 0, failed: 0, skipped: true };
   }
 
@@ -493,8 +570,7 @@ async function sendClientWelcomeEmail(client, user, plainPassword) {
   const tasks = [];
   for (const recipient of recipients) {
     tasks.push(
-      transporter.sendMail({
-        from: mailFrom,
+      sendMailUnified({
         to: recipient,
         subject,
         text,
@@ -516,8 +592,7 @@ async function sendClientWelcomeEmail(client, user, plainPassword) {
 }
 
 async function sendClientCredentialsUpdatedEmail(client, user, newEmail, newPassword) {
-  const transporter = getMailTransporter();
-  if (!transporter) return;
+  if (!isEmailEnabled()) return { sent: 0, failed: 0, skipped: true };
 
   const appUrl = getAppUrl();
   const subject = `HAAK Asset Management - Account Login Updated`;
@@ -550,8 +625,7 @@ async function sendClientCredentialsUpdatedEmail(client, user, newEmail, newPass
   const tasks = [];
   for (const recipient of recipients) {
     tasks.push(
-      transporter.sendMail({
-        from: mailFrom,
+      sendMailUnified({
         to: recipient,
         subject,
         text,
@@ -568,13 +642,13 @@ async function sendClientCredentialsUpdatedEmail(client, user, newEmail, newPass
   if (failed.length > 0) {
     console.warn(`Credential update email failed for ${failed.length} recipient(s).`);
   }
+  return { sent: results.length - failed.length, failed: failed.length, skipped: false };
 }
 
 async function emailNewNotifications(newNotifications, state) {
-  const transporter = getMailTransporter();
-  if (!transporter || newNotifications.length === 0) {
-    if (!transporter && newNotifications.length > 0) console.warn("Notification email skipped because SMTP is not configured.");
-    return { sent: 0, failed: 0, skipped: !transporter };
+  if (!isEmailEnabled() || newNotifications.length === 0) {
+    if (!isEmailEnabled() && newNotifications.length > 0) console.warn("Notification email skipped because SMTP/Resend is not configured.");
+    return { sent: 0, failed: 0, skipped: true };
   }
 
   const appUrl = getAppUrl();
@@ -582,23 +656,24 @@ async function emailNewNotifications(newNotifications, state) {
   for (const notification of newNotifications) {
     const recipients = notificationRecipients(notification, state);
     for (const recipient of recipients) {
-      tasks.push(transporter.sendMail({
-        from: mailFrom,
-        to: recipient.email,
-        subject: `[HAAK Assets] ${notification.title}`,
-        text: [
-          notification.title,
-          "",
-          notification.message,
-          notification.companyName ? `Company: ${notification.companyName}` : "",
-          notification.actorRole ? `By: ${notification.actorName || notification.actorRole}` : "",
-          appUrl ? `Open: ${appUrl}` : ""
-        ].filter(Boolean).join("\n"),
-        html: buildNotificationEmail(notification, appUrl),
-        attachments: fs.existsSync(emailLogoPath)
-          ? [{ filename: "haak-infotech.png", path: emailLogoPath, cid: emailLogoCid }]
-          : []
-      }));
+      tasks.push(
+        sendMailUnified({
+          to: recipient.email,
+          subject: `[HAAK Assets] ${notification.title}`,
+          text: [
+            notification.title,
+            "",
+            notification.message,
+            notification.companyName ? `Company: ${notification.companyName}` : "",
+            notification.actorRole ? `By: ${notification.actorName || notification.actorRole}` : "",
+            appUrl ? `Open: ${appUrl}` : ""
+          ].filter(Boolean).join("\n"),
+          html: buildNotificationEmail(notification, appUrl),
+          attachments: fs.existsSync(emailLogoPath)
+            ? [{ filename: "haak-infotech.png", path: emailLogoPath, cid: emailLogoCid }]
+            : []
+        })
+      );
     }
   }
 
@@ -612,8 +687,7 @@ async function emailNewNotifications(newNotifications, state) {
 }
 
 async function sendAdminAlertTestEmail(email) {
-  const transporter = getMailTransporter();
-  if (!transporter) return { sent: 0, failed: 0, skipped: true };
+  if (!isEmailEnabled()) return { sent: 0, failed: 0, skipped: true };
   const appUrl = getAppUrl();
   const notification = {
     title: "Admin alert email test",
@@ -625,8 +699,7 @@ async function sendAdminAlertTestEmail(email) {
     tone: "success",
     createdAt: new Date().toISOString()
   };
-  await transporter.sendMail({
-    from: mailFrom,
+  const result = await sendMailUnified({
     to: email,
     subject: "[HAAK Assets] Admin alert email test",
     text: [
@@ -640,7 +713,7 @@ async function sendAdminAlertTestEmail(email) {
       ? [{ filename: "haak-infotech.png", path: emailLogoPath, cid: emailLogoCid }]
       : []
   });
-  return { sent: 1, failed: 0, skipped: false };
+  return result;
 }
 
 function newNotificationsFromState(nextState, currentState) {
@@ -963,8 +1036,8 @@ app.post("/api/email/admin-alert/test", requireAuth, requireAdmin, async (reques
   const smtp = smtpConfigStatus();
   if (!smtp.configured) {
     return response.status(503).json({
-      error: "SMTP email is not configured on the server.",
-      detail: `Set ${smtp.missing.join(", ")} in /opt/haak-asset/.env and restart Docker.`
+      error: "Email delivery is not configured on the server.",
+      detail: "Set RESEND_API_KEY for Resend delivery, or set SMTP_HOST, SMTP_USER, SMTP_PASS in the environment."
     });
   }
   try {
