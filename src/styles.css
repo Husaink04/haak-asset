@@ -447,11 +447,17 @@ header h1 {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 12px;
+  min-width: 0;
 }
 
 .page-heading {
   display: grid;
   gap: 4px;
+  min-width: 0;
+}
+
+.page-heading h1 {
+  overflow-wrap: anywhere;
 }
 
 .notification-shell {
@@ -1137,7 +1143,8 @@ nav {
 nav button,
 .logout,
 .collapse-toggle,
-.theme-toggle {
+.theme-toggle,
+.install-button {
   position: relative;
   overflow: hidden;
   display: flex;
@@ -1157,7 +1164,8 @@ nav button,
 nav button::before,
 .logout::before,
 .collapse-toggle::before,
-.theme-toggle::before {
+.theme-toggle::before,
+.install-button::before {
   content: "";
   position: absolute;
   inset: 1px;
@@ -1171,7 +1179,8 @@ nav button::before,
 nav button > *,
 .logout > *,
 .collapse-toggle > *,
-.theme-toggle > * {
+.theme-toggle > *,
+.install-button > * {
   position: relative;
   z-index: 1;
 }
@@ -1180,7 +1189,8 @@ nav button.active,
 nav button:hover,
 .logout:hover,
 .collapse-toggle:hover,
-.theme-toggle:hover {
+.theme-toggle:hover,
+.install-button:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.05);
 }
@@ -1189,7 +1199,8 @@ nav button:hover::before,
 nav button.active::before,
 .logout:hover::before,
 .collapse-toggle:hover::before,
-.theme-toggle:hover::before {
+.theme-toggle:hover::before,
+.install-button:hover::before {
   opacity: 1;
   transform: translateX(140%);
 }
@@ -1216,7 +1227,8 @@ nav button.active {
   opacity: 0.48;
 }
 
-.theme-toggle {
+.theme-toggle,
+.install-button {
   width: 44px;
   min-height: 44px;
   justify-self: center;
@@ -1227,18 +1239,21 @@ nav button.active {
   transition: background 180ms ease, border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
 }
 
-.theme-toggle svg {
+.theme-toggle svg,
+.install-button svg {
   flex: 0 0 auto;
   transition: transform 220ms ease;
 }
 
-.theme-toggle:hover {
+.theme-toggle:hover,
+.install-button:hover {
   border-color: rgba(239, 31, 36, 0.55);
   box-shadow: 0 10px 22px rgba(239, 31, 36, 0.16);
   transform: translateY(-1px);
 }
 
-.theme-toggle:hover svg {
+.theme-toggle:hover svg,
+.install-button:hover svg {
   transform: rotate(-12deg) scale(1.08);
 }
 
@@ -1258,6 +1273,7 @@ nav button.active {
 .sidebar-collapsed nav button span,
 .sidebar-collapsed .collapse-toggle span,
 .sidebar-collapsed .theme-toggle span,
+.sidebar-collapsed .install-button span,
 .sidebar-collapsed .logout span {
   position: absolute;
   width: 1px;
@@ -1270,12 +1286,14 @@ nav button.active {
 .sidebar-collapsed nav button,
 .sidebar-collapsed .collapse-toggle,
 .sidebar-collapsed .theme-toggle,
+.sidebar-collapsed .install-button,
 .sidebar-collapsed .logout {
   justify-content: center;
   padding: 12px;
 }
 
-.sidebar-collapsed .theme-toggle {
+.sidebar-collapsed .theme-toggle,
+.sidebar-collapsed .install-button {
   width: 100%;
   justify-self: stretch;
 }
@@ -1295,6 +1313,7 @@ header {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
+  min-width: 0;
   margin-bottom: 20px;
   padding-bottom: 14px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.14);
@@ -1419,7 +1438,7 @@ header h1 {
 
 .dashboard-health {
   display: grid;
-  grid-template-columns: repeat(3, minmax(92px, 1fr));
+  grid-template-columns: repeat(4, minmax(82px, 1fr));
   gap: 12px;
 }
 
@@ -1682,6 +1701,19 @@ small {
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
   gap: 18px;
   align-items: start;
+}
+
+.large-action-button {
+  min-height: 52px;
+  padding: 14px 18px;
+  justify-self: end;
+  align-self: stretch;
+  font-size: 15px;
+}
+
+.companies-hero .large-action-button {
+  grid-column: 2;
+  width: 100%;
 }
 
 .companies-hero-copy,
@@ -2268,6 +2300,7 @@ small {
 .asset-row small {
   display: block;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .asset-row-content {
@@ -2282,6 +2315,7 @@ small {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
+  min-width: 0;
 }
 
 .asset-row-edit {
@@ -3175,6 +3209,29 @@ dl dt {
   padding: 24px;
 }
 
+.modal-card-wide {
+  width: min(920px, 100%);
+  display: grid;
+  gap: 18px;
+}
+
+.modal-card .modal-form-panel,
+.modal-card .asset-wizard,
+.modal-card .asset-category-manager {
+  border: 0;
+  box-shadow: none;
+}
+
+.modal-card .modal-form-panel,
+.modal-card .asset-wizard {
+  padding: 0;
+  background: transparent;
+}
+
+.modal-card .asset-category-manager {
+  margin: 0;
+}
+
 .modal-close {
   min-width: 88px;
 }
@@ -3626,6 +3683,7 @@ dl dt {
   .sidebar-collapsed nav button span,
   .sidebar-collapsed .collapse-toggle span,
   .sidebar-collapsed .theme-toggle span,
+  .sidebar-collapsed .install-button span,
   .sidebar-collapsed .logout span {
     position: static;
     width: auto;
@@ -3644,9 +3702,11 @@ dl dt {
   .logout,
   .collapse-toggle,
   .theme-toggle,
+  .install-button,
   .sidebar-collapsed nav button,
   .sidebar-collapsed .collapse-toggle,
   .sidebar-collapsed .theme-toggle,
+  .sidebar-collapsed .install-button,
   .sidebar-collapsed .logout {
     min-height: 42px;
     justify-content: flex-start;
@@ -3654,7 +3714,7 @@ dl dt {
 
   .sidebar-actions {
     margin-top: 0;
-    grid-template-columns: repeat(3, minmax(0, auto));
+    grid-template-columns: repeat(4, minmax(0, auto));
     align-items: center;
     justify-content: start;
     padding-top: 12px;
@@ -3665,7 +3725,8 @@ dl dt {
     width: fit-content;
   }
 
-  .theme-toggle {
+  .theme-toggle,
+  .install-button {
     width: 44px;
     justify-self: center;
     justify-content: center;
@@ -3677,7 +3738,7 @@ dl dt {
   }
 
   .dashboard-health {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .client-dashboard-grid > .panel:first-child {
@@ -3715,6 +3776,10 @@ dl dt {
     right: auto;
     left: 0;
     width: min(420px, calc(100vw - 52px));
+  }
+
+  .companies-hero .large-action-button {
+    grid-column: 1;
   }
 }
 
@@ -3847,6 +3912,7 @@ dl dt {
   nav button,
   .logout,
   .theme-toggle,
+  .install-button,
   .collapse-toggle {
     min-height: 44px;
     padding: 10px;
@@ -3872,6 +3938,13 @@ dl dt {
     padding: 0;
   }
 
+  .install-button {
+    width: 44px;
+    justify-self: start;
+    justify-content: center;
+    padding: 0;
+  }
+
   .stats-grid,
   .dashboard-health,
   .service-summary,
@@ -3891,6 +3964,7 @@ dl dt {
 
   .asset-row {
     grid-template-columns: 64px 1fr;
+    align-items: start;
   }
 
   .asset-row img,
@@ -3934,6 +4008,16 @@ dl dt {
     grid-column: 2;
   }
 
+  .asset-row-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .asset-row-edit {
+    width: 100%;
+  }
+
   .company-row {
     grid-template-columns: 50px 1fr;
   }
@@ -3964,6 +4048,16 @@ dl dt {
   }
 
   .panel {
+    padding: 16px;
+  }
+
+  .modal-backdrop {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .modal-card {
+    max-height: calc(100vh - 24px);
     padding: 16px;
   }
 
