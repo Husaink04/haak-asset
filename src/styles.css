@@ -1944,13 +1944,7 @@ small {
 
 @media (min-width: 1501px) {
   .companies-layout {
-    grid-template-columns: minmax(280px, 340px) minmax(0, 1.35fr) minmax(320px, 0.92fr);
-  }
-
-  .companies-create-panel {
-    grid-column: auto;
-    position: sticky;
-    top: 28px;
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
   }
 }
 
@@ -2436,6 +2430,7 @@ small {
 }
 
 .assets-page-toolbar {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3802,7 +3797,7 @@ dl dt {
 
 @media (max-width: 1260px) and (min-width: 981px) {
   .admin-assets-layout {
-    grid-template-columns: minmax(230px, 0.72fr) minmax(360px, 1.28fr) minmax(280px, 0.86fr);
+    grid-template-columns: minmax(230px, 0.72fr) minmax(0, 1.28fr);
     gap: 16px;
   }
 
