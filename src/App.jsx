@@ -29,7 +29,8 @@ import {
   Trash2,
   UserRound,
   Wifi,
-  WifiOff
+  WifiOff,
+  Download,
 } from "lucide-react";
 import React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -853,7 +854,7 @@ function NotificationCenter({ user, notifications, unreadCount, onMarkRead, onCl
   );
 }
 
-function Shell({ user, children, view, setView, onLogout, headerAction, notice, clientBrand, apiStatus = "offline", theme = "light", onToggleTheme, notifications = [], unreadCount = 0, onMarkNotificationsRead, onClearNotifications }) {
+function Shell({ user, children, view, setView, onLogout, headerAction, notice, clientBrand, apiStatus = "offline", theme = "light", onToggleTheme, notifications = [], unreadCount = 0, onMarkNotificationsRead, onClearNotifications, showInstallButton = true, onInstallApp }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(() => window.matchMedia("(max-width: 1180px)").matches);
@@ -963,6 +964,17 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
             {(isCompactViewport ? !mobileNavOpen : shellCollapsed) ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
             <span>{isCompactViewport ? (mobileNavOpen ? "Collapse" : "Expand") : (shellCollapsed ? "Expand" : "Collapse")}</span>
           </button>
+          {showInstallButton && (
+            <button
+              className="install-button"
+              type="button"
+              onClick={onInstallApp}
+              aria-label="Install app"
+              title="Install app"
+            >
+              <Download size={18} />
+            </button>
+          )}
           <button
             className="theme-toggle"
             type="button"
@@ -1015,12 +1027,6 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
             ) : null}
           </div>
         </header>
-        {notice ? (
-          <div className={`app-toast ${notice.tone || "success"}`} role="status" aria-live="polite">
-            <CheckCircle2 size={16} />
-            <span>{notice.message}</span>
-          </div>
-        ) : null}
         {children}
       </div>
       </div>
@@ -1692,6 +1698,7 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
   const [selectedId, setSelectedId] = useState(data.clients[0]?.id);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
 
   const companyDirectory = useMemo(() => data.clients.map((client) => {
     const assignedAssets = data.assets.filter((asset) => asset.clientId === client.id);
@@ -1783,6 +1790,12 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
     }
   }
 
+  async function createCompanyFromModal(form) {
+    const created = await createCompany(form);
+    if (created !== false) setShowCompanyModal(false);
+    return created;
+  }
+
   function updateCompany(form, action = "updated") {
     setData((current) => withNotification(
       {
@@ -1852,6 +1865,9 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
             <span>{statusFilter === "all" ? "All statuses" : `${statusFilter} only`}</span>
           </div>
         </div>
+        <button className="primary large-action-button" type="button" onClick={() => setShowCompanyModal(true)}>
+          <Plus size={18} /> Add company
+        </button>
       </div>
 
       <div className="companies-layout">
@@ -1960,8 +1976,21 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
           )}
         </div>
 
-        <CompanyForm onCreate={createCompany} className="companies-create-panel" />
       </div>
+      {showCompanyModal && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setShowCompanyModal(false)}>
+          <div className="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="company-modal-title" onClick={(event) => event.stopPropagation()}>
+            <div className="panel-head">
+              <div>
+                <span className="eyebrow">Company onboarding</span>
+                <h2 id="company-modal-title">Add company</h2>
+              </div>
+              <button className="secondary modal-close" type="button" onClick={() => setShowCompanyModal(false)}>Close</button>
+            </div>
+            <CompanyForm onCreate={createCompanyFromModal} className="modal-form-panel" />
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -1992,14 +2021,8 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
             <span><strong>{data.clients.length}</strong> Companies</span>
             <span><strong>{scopedAssets.length}</strong> Assets</span>
             <span><strong>{openAppeals.length}</strong> Open issues</span>
+            <span><strong>{dueServices.length}</strong> Service due</span>
           </div>
-        </div>
-
-        <div className="stats-grid dashboard-kpis">
-          <Stat label="Companies" value={data.clients.length} icon={<Building2 />} />
-          <Stat label="Total assets" value={scopedAssets.length} icon={<Archive />} />
-          <Stat label="Priority issues" value={openAppeals.length} icon={<AlertCircle />} />
-          <Stat label="Service due" value={dueServices.length} icon={<History />} />
         </div>
 
         <div className="dashboard-main-grid">
@@ -2598,6 +2621,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
   const [filterCategory, setFilterCategory] = useState("");
   const [selectedId, setSelectedId] = useState(scopedAssets[0]?.id);
   const [assetView, setAssetView] = useState("details");
+  const [showAssetModal, setShowAssetModal] = useState(false);
   const assetCategories = data.assetCategories || [];
   const editableClients = user.role === "admin" ? data.clients : data.clients.filter((client) => client.id === user.clientId);
   const selectedClient = editableClients.find((client) => client.id === filterClientId) || editableClients[0];
@@ -2616,10 +2640,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
       }))
       .filter((group) => group.assets.length > 0)
     : [{ client: data.clients.find((client) => client.id === user.clientId), assets: filtered }];
-  const creationClients = user.role === "client"
-    ? data.clients.filter((client) => client.id === user.clientId)
-    : data.clients;
-
   useEffect(() => {
     if (!filterClientId && editableClients[0]?.id) setFilterClientId(editableClients[0].id);
   }, [editableClients, filterClientId]);
@@ -2672,7 +2692,9 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
     ));
     setSelectedId(asset.id);
     setAssetView("details");
+    setShowAssetModal(false);
     notify(`Added ${asset.name}.`);
+    return true;
   }
 
   function updateStatus(assetId, status) {
@@ -2875,7 +2897,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
   }
 
   function openAssetForm() {
-    setAssetView("add");
+    setShowAssetModal(true);
   }
 
   function createCategory(name) {
@@ -2965,7 +2987,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
           </div>
           <div className="segmented-control">
             <button className={assetView === "details" ? "active" : ""} type="button" onClick={() => setAssetView("details")}>Details</button>
-            <button className={assetView === "add" ? "active" : ""} type="button" onClick={() => setAssetView("add")}>Add asset</button>
             <button className={assetView === "edit" ? "active" : ""} type="button" onClick={() => setAssetView("edit")} disabled={!selected}>Edit asset</button>
           </div>
           {user.role === "admin" && (
@@ -2974,7 +2995,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
             </button>
           )}
         </div>
-        {selected || assetView === "add" || user.role === "admin" ? (
+        {selected || user.role === "admin" ? (
           <>
             {assetView === "details" && selected && (
               <>
@@ -3024,17 +3045,6 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
             )}
               </>
             )}
-            {assetView === "add" && (
-              <div className="asset-subpage">
-                <div className="panel asset-subpage-intro">
-                  <span className="eyebrow">New asset</span>
-                  <h2>Create a new managed asset</h2>
-                  <p>Use the guided wizard to assign the company, record identity details, and upload starting media before saving.</p>
-                </div>
-                {user.role === "admin" && <AssetCategoryManager categories={selectedCompanyCategories} onCreateCategory={createCategory} />}
-                <AssetForm clients={editableClients} categories={selectedCompanyCategories} existingAssets={data.assets} onCreate={createAsset} lockedClientId={filterClientId || (user.role === "client" ? user.clientId : "")} />
-              </div>
-            )}
             {assetView === "edit" && (
               selected ? (
                 <div className="asset-subpage">
@@ -3073,6 +3083,21 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
                 <Plus size={16} /> Add asset
               </button>
             )}
+          </div>
+        )}
+        {showAssetModal && (
+          <div className="modal-backdrop" role="presentation" onClick={() => setShowAssetModal(false)}>
+            <div className="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="asset-modal-title" onClick={(event) => event.stopPropagation()}>
+              <div className="panel-head">
+                <div>
+                  <span className="eyebrow">Asset setup</span>
+                  <h2 id="asset-modal-title">Add asset</h2>
+                </div>
+                <button className="secondary modal-close" type="button" onClick={() => setShowAssetModal(false)}>Close</button>
+              </div>
+              {user.role === "admin" && <AssetCategoryManager categories={selectedCompanyCategories} onCreateCategory={createCategory} />}
+              <AssetForm clients={editableClients} categories={selectedCompanyCategories} existingAssets={data.assets} onCreate={createAsset} lockedClientId={filterClientId || (user.role === "client" ? user.clientId : "")} />
+            </div>
           </div>
         )}
       </div>
@@ -4002,11 +4027,39 @@ export default function App() {
   const [showEngineerModal, setShowEngineerModal] = useState(false);
   const [theme, setTheme] = useState(loadStoredTheme);
   const seenNotificationIds = useRef({ initialized: false, ids: new Set() });
-
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [appInstalled, setAppInstalled] = useState(() => window.matchMedia("(display-mode: standalone)").matches || Boolean(window.navigator?.standalone));
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setDeferredPrompt(event);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleInstalled = () => {
+      console.log("PWA installed");
+      setDeferredPrompt(null);
+      setAppInstalled(true);
+    };
+
+    window.addEventListener("appinstalled", handleInstalled);
+
+    return () => {
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -4023,7 +4076,6 @@ export default function App() {
         cancelled = true;
       };
     }
-
     const pending = loadPendingState();
     if (pending?.state) {
       apiRequest("/state", {
@@ -4177,6 +4229,26 @@ export default function App() {
       return nextState;
     });
   }, [data.clients, user]);
+
+  const handleInstallApp = async () => {
+    if (appInstalled) return;
+    if (!deferredPrompt) {
+      notify("Can't install. Browser doesn't support installation.", "error");
+      return;
+    }
+
+    deferredPrompt.prompt();
+
+    const { outcome } = await deferredPrompt.userChoice;
+
+    if (outcome === "accepted") {
+      console.log("User installed the app");
+    } else {
+      console.log("User dismissed the install");
+    }
+
+    setDeferredPrompt(null);
+  };
 
   async function syncPendingState() {
     const pending = loadPendingState();
@@ -4610,6 +4682,8 @@ export default function App() {
         unreadCount={notificationUnreadCount}
         onMarkNotificationsRead={markNotificationsRead}
         onClearNotifications={clearNotifications}
+        showInstallButton={!appInstalled}
+        onInstallApp={handleInstallApp}
         onLogout={() => {
         clearStoredSession();
         setViewState("dashboard");
@@ -4634,6 +4708,8 @@ export default function App() {
       unreadCount={notificationUnreadCount}
       onMarkNotificationsRead={markNotificationsRead}
       onClearNotifications={clearNotifications}
+      showInstallButton={!appInstalled}
+      onInstallApp={handleInstallApp}
       headerAction={null}
       onLogout={() => {
       clearStoredSession();
