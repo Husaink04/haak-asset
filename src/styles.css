@@ -380,12 +380,19 @@ body {
 }
 
 [data-theme="dark"] .modal-backdrop {
-  background: rgba(2, 6, 23, 0.76);
-  backdrop-filter: blur(5px);
+  background: rgba(2, 6, 23, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 [data-theme="dark"] .modal-card {
-  border: 1px solid #29405f;
+  background: rgba(13, 23, 38, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    0 24px 60px rgba(0, 0, 0, 0.35), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 [data-theme="dark"] .engineer-list h3 {
@@ -3199,7 +3206,9 @@ dl dt {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(2, 11, 24, 0.48);
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .modal-card {
@@ -3207,6 +3216,14 @@ dl dt {
   max-height: calc(100vh - 48px);
   overflow: auto;
   padding: 24px;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 16px;
+  box-shadow: 
+    0 24px 60px rgba(15, 23, 42, 0.16), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .modal-card-wide {
