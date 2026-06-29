@@ -11,6 +11,7 @@ import helmet from "helmet";
 import jwt from "jsonwebtoken";
 import multer from "multer";
 import nodemailer from "nodemailer";
+import { v2 as cloudinary } from "cloudinary";
 import { query } from "./db.js";
 import {
   createUploadedFile,
@@ -25,6 +26,15 @@ import {
 import { seedState } from "./seedState.js";
 
 dotenv.config();
+
+if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true
+  });
+}
 
 const app = express();
 const port = Number(process.env.PORT || process.env.API_PORT || 4000);
@@ -1531,7 +1541,25 @@ app.post("/api/upload", requireAuth, (request, response) => {
         return response.status(400).json({ error: "A valid file is required." });
       }
 
-      const url = `/uploads/${request.file.filename}`;
+      let url = `/uploads/${request.file.filename}`;
+
+      if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
+        try {
+          const result = await cloudinary.uploader.upload(request.file.path, {
+            folder: "haak-assets",
+            resource_type: "auto"
+          });
+          url = result.secure_url;
+          try {
+            fs.unlinkSync(request.file.path);
+          } catch (unlinkError) {
+            console.error("Failed to delete local temporary upload file:", unlinkError);
+          }
+        } catch (cloudinaryError) {
+          console.error("Cloudinary upload failed, falling back to local storage:", cloudinaryError);
+        }
+      }
+
       const record = {
         id: uid("file"),
         uploadedBy: request.auth.sub,
