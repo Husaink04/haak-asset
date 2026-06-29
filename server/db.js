@@ -9,7 +9,9 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is missing. Copy .env.example to .env and set your PostgreSQL password.");
 }
 
-const isLocal = process.env.DATABASE_URL.includes("localhost") || process.env.DATABASE_URL.includes("127.0.0.1");
+const databaseUrl = new URL(process.env.DATABASE_URL);
+const localDatabaseHosts = new Set(["localhost", "127.0.0.1", "db"]);
+const isLocal = localDatabaseHosts.has(databaseUrl.hostname);
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
