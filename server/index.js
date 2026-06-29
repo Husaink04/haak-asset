@@ -99,12 +99,16 @@ const upload = multer({
   fileFilter: (_request, file, callback) => {
     const allowedTypes = new Set([
       "image/jpeg",
+      "image/jpg",
       "image/png",
+      "image/gif",
+      "image/webp",
       "application/pdf",
-      "application/msword"
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ]);
     if (!allowedTypes.has(file.mimetype)) {
-      return callback(new Error("Unsupported file type. Images must be JPG or PNG, and documents must be PDF or DOC."));
+      return callback(new Error("Unsupported file type. Images must be JPG, PNG, WEBP or GIF, and documents must be PDF, DOC or DOCX."));
     }
     callback(null, true);
   }

@@ -61,10 +61,11 @@ const SERVICE_DUE_TERMS = [
   { label: "6M", months: 6 },
   { label: "1Y", months: 12 }
 ];
-const IMAGE_UPLOAD_TYPES = new Set(["image/jpeg", "image/png"]);
+const IMAGE_UPLOAD_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"]);
 const DOCUMENT_UPLOAD_TYPES = new Set([
   "application/pdf",
-  "application/msword"
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ]);
 
 function normalizeApiUrl(value) {
@@ -1168,7 +1169,8 @@ function CompanyForm({ onCreate, className = "" }) {
   }
 
   async function uploadLogo(event) {
-    const file = event.target.files?.[0];
+    const target = event.target;
+    const file = target?.files?.[0];
     if (!file) return;
     setUploadingLogo(true);
     setUploadError("");
@@ -1179,7 +1181,7 @@ function CompanyForm({ onCreate, className = "" }) {
       setUploadError(uploadErrorMessage(error));
     } finally {
       setUploadingLogo(false);
-      event.target.value = "";
+      if (target) target.value = "";
     }
   }
 
@@ -1519,7 +1521,8 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
   }
 
   async function uploadLogo(event) {
-    const file = event.target.files?.[0];
+    const target = event.target;
+    const file = target?.files?.[0];
     if (!file) return;
     setUploadingLogo(true);
     setUploadError("");
@@ -1530,7 +1533,7 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
       setUploadError(uploadErrorMessage(error));
     } finally {
       setUploadingLogo(false);
-      event.target.value = "";
+      if (target) target.value = "";
     }
   }
 
@@ -2201,6 +2204,13 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
     category: categories[0] || "",
     userName: "",
     location: "",
+    brand: "",
+    model: "",
+    serialNumber: "",
+    purchaseDate: "",
+    warrantyEndDate: "",
+    notes: "",
+    status: "active",
     image: "",
     documents: []
   });
@@ -2234,7 +2244,8 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
   }
 
   async function uploadAssetImage(event) {
-    const file = event.target.files?.[0];
+    const target = event.target;
+    const file = target?.files?.[0];
     if (!file) return;
     setUploadingImage(true);
     setUploadError("");
@@ -2245,12 +2256,13 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
       setUploadError(uploadErrorMessage(error));
     } finally {
       setUploadingImage(false);
-      event.target.value = "";
+      if (target) target.value = "";
     }
   }
 
   async function uploadAssetDocument(event) {
-    const file = event.target.files?.[0];
+    const target = event.target;
+    const file = target?.files?.[0];
     if (!file) return;
     setUploadingDocument(true);
     setUploadError("");
@@ -2261,7 +2273,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
       setUploadError(uploadErrorMessage(error));
     } finally {
       setUploadingDocument(false);
-      event.target.value = "";
+      if (target) target.value = "";
     }
   }
 
@@ -2272,12 +2284,19 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
     const defaultClientId = lockedClientId || clients[0]?.id || "";
     const defaultCategory = categories[0] || "";
     setForm({
-      clientId: defaultClientId,
-      assetCode: generateAssetCode(clients, existingAssets, defaultClientId, defaultCategory),
-      category: defaultCategory,
       name: "",
+      assetCode: generateAssetCode(clients, existingAssets, defaultClientId, defaultCategory),
+      clientId: defaultClientId,
+      category: defaultCategory,
       userName: "",
       location: "",
+      brand: "",
+      model: "",
+      serialNumber: "",
+      purchaseDate: "",
+      warrantyEndDate: "",
+      notes: "",
+      status: "active",
       image: "",
       documents: []
     });
@@ -2288,9 +2307,8 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
 
   function canContinue() {
     if (step === 0) return Boolean(form.clientId);
-    if (step === 1) return Boolean(form.category);
-    if (step === 2) return Boolean(form.name.trim());
-    return Boolean(form.userName.trim());
+    if (step === 1) return Boolean(form.category && form.name.trim());
+    return true;
   }
 
   function goToStep(index) {
@@ -2315,13 +2333,6 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
         <span className="badge active">{steps[step]}</span>
       </div>
 
-      <label className="asset-company-field">
-        Company
-        <select value={form.clientId} onChange={(event) => update("clientId", event.target.value)}>
-          {clients.map((client) => <option key={client.id} value={client.id}>{client.companyName}</option>)}
-        </select>
-      </label>
-
       <div className="stepper" aria-label="Asset creation steps">
         {steps.map((label, index) => (
           <button
@@ -2340,7 +2351,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
       {step === 0 && (
         <div className="wizard-step">
           <h3>Assign to company</h3>
-          <p>Select the client company that owns or uses this asset.</p>
+          <p>Select client company, location, and user assignment.</p>
           {lockedClientId ? (
             <div className="review-box">
               <strong>{clients.find((client) => client.id === lockedClientId)?.companyName || "Your company"}</strong>
@@ -2358,41 +2369,109 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
             Location
             <input placeholder="Office, department, site, or room" value={form.location} onChange={(event) => update("location", event.target.value)} />
           </label>
+          <label>
+            User name
+            <input placeholder="Assigned user name" value={form.userName} onChange={(event) => update("userName", event.target.value)} />
+          </label>
         </div>
       )}
 
       {step === 1 && (
         <div className="wizard-step">
-          <h3>Category</h3>
-          <p>Choose the asset category for reporting and service tracking.</p>
+          <h3>Asset details</h3>
+          <p>Provide primary identifying details for this asset.</p>
           <label>
             Category
             <select value={form.category} onChange={(event) => update("category", event.target.value)} required>
               {categories.map((category) => <option key={category} value={category}>{category}</option>)}
             </select>
           </label>
+          <label>
+            Asset name *
+            <input placeholder="Dell Latitude 5440" value={form.name} onChange={(event) => update("name", event.target.value)} required />
+          </label>
+          <label>
+            Brand
+            <input placeholder="Dell, HP, Lenovo" value={form.brand} onChange={(event) => update("brand", event.target.value)} />
+          </label>
+          <label>
+            Model
+            <input placeholder="Latitude 5440" value={form.model} onChange={(event) => update("model", event.target.value)} />
+          </label>
+          <label>
+            Serial number
+            <input placeholder="Serial or service tag" value={form.serialNumber} onChange={(event) => update("serialNumber", event.target.value)} />
+          </label>
         </div>
       )}
 
       {step === 2 && (
         <div className="wizard-step">
-          <h3>Asset name</h3>
-          <p>Use the asset's working name or label.</p>
+          <h3>Lifecycle state</h3>
+          <p>Define asset status, purchase dates, and notes.</p>
           <label>
-            Asset name
-            <input placeholder="Dell Latitude 5440" value={form.name} onChange={(event) => update("name", event.target.value)} required />
+            Status
+            <select value={form.status} onChange={(event) => update("status", event.target.value)}>
+              <option value="active">Active</option>
+              <option value="in_service">In service</option>
+              <option value="repairing">Repairing</option>
+              <option value="repaired">Repaired</option>
+              <option value="retired">Retired</option>
+              <option value="damaged">Damaged</option>
+            </select>
+          </label>
+          <label>
+            Purchase date
+            <input type="date" value={form.purchaseDate} onChange={(event) => update("purchaseDate", event.target.value)} />
+          </label>
+          <label>
+            Warranty end date
+            <input type="date" value={form.warrantyEndDate} onChange={(event) => update("warrantyEndDate", event.target.value)} />
+          </label>
+          <label>
+            Notes
+            <textarea placeholder="Additional technical details..." value={form.notes} onChange={(event) => update("notes", event.target.value)} />
           </label>
         </div>
       )}
 
       {step === 3 && (
         <div className="wizard-step">
-          <h3>User name</h3>
-          <p>Record the user or person currently linked to the asset.</p>
-          <label>
-            User name
-            <input placeholder="Assigned user name" value={form.userName} onChange={(event) => update("userName", event.target.value)} required />
+          <h3>Images and documents</h3>
+          <p>Add photos or warranty certificates to this asset.</p>
+          <div className="asset-editor-media">
+            <AssetVisual asset={{ images: form.image ? [form.image] : [], name: form.name }} className="asset-editor-preview" />
+            <div className="asset-editor-media-controls">
+              <label className="file-field">
+                Upload image
+                <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif" onChange={uploadAssetImage} disabled={uploadingImage} />
+                <span><Camera size={15} /> {form.image ? "Upload replacement image" : `Upload first image (JPG/PNG/WEBP, max ${MAX_UPLOAD_MB} MB)`}</span>
+              </label>
+              {form.image && (
+                <button className="secondary" type="button" onClick={() => update("image", "")}>Remove image</button>
+              )}
+            </div>
+          </div>
+          
+          <div className="document-list">
+            {form.documents.length > 0 ? form.documents.map((doc, index) => (
+              <div className="document-row" key={index}>
+                <Paperclip size={16} />
+                <span>{documentLabel(doc)}</span>
+                <button className="secondary inline-remove" type="button" onClick={() => setForm(curr => ({ ...curr, documents: curr.documents.filter((_, idx) => idx !== index) }))}>Remove</button>
+              </div>
+            )) : <div className="empty-inline">No documents uploaded yet.</div>}
+          </div>
+
+          <label className="file-field">
+            Upload document
+            <input type="file" accept=".pdf,.doc,.docx" onChange={uploadAssetDocument} disabled={uploadingDocument} />
+            <span><Paperclip size={15} /> Upload document (.doc/.docx/.pdf, max {MAX_UPLOAD_MB} MB)</span>
           </label>
+
+          {uploadingImage && <small className="upload-note">Uploading image...</small>}
+          {uploadingDocument && <small className="upload-note">Uploading document...</small>}
+          {uploadError && <small className="upload-error">{uploadError}</small>}
         </div>
       )}
 
@@ -2418,7 +2497,8 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete, canDelete
   }
 
   async function uploadImage(event) {
-    const file = event.target.files?.[0];
+    const target = event.target;
+    const file = target?.files?.[0];
     if (!file) return;
     setUploadingImage(true);
     setUploadError("");
@@ -2429,7 +2509,7 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete, canDelete
       setUploadError(uploadErrorMessage(error));
     } finally {
       setUploadingImage(false);
-      event.target.value = "";
+      if (target) target.value = "";
     }
   }
 
@@ -2502,7 +2582,8 @@ function AssetMediaPanel({ asset, onAddImage, onAddDocument, onRemoveImage, onRe
   const [uploadError, setUploadError] = useState("");
 
   async function uploadImage(event) {
-    const file = event.target.files?.[0];
+    const target = event.target;
+    const file = target?.files?.[0];
     if (!file) return;
     setUploadingImage(true);
     setUploadError("");
@@ -2513,12 +2594,13 @@ function AssetMediaPanel({ asset, onAddImage, onAddDocument, onRemoveImage, onRe
       setUploadError(uploadErrorMessage(error));
     } finally {
       setUploadingImage(false);
-      event.target.value = "";
+      if (target) target.value = "";
     }
   }
 
   async function uploadDocument(event) {
-    const file = event.target.files?.[0];
+    const target = event.target;
+    const file = target?.files?.[0];
     if (!file) return;
     setUploadingDocument(true);
     setUploadError("");
@@ -2529,7 +2611,7 @@ function AssetMediaPanel({ asset, onAddImage, onAddDocument, onRemoveImage, onRe
       setUploadError(uploadErrorMessage(error));
     } finally {
       setUploadingDocument(false);
-      event.target.value = "";
+      if (target) target.value = "";
     }
   }
 
@@ -2748,7 +2830,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
           lifecycle.push({ id: uid("l"), type: "Status", description: `Status changed to ${String(form.status || "open").replace("_", " ")}.`, createdAt: today() });
         }
         lifecycle.push({ id: uid("l"), type: "Updated", description: `Asset details updated by ${user.role}.`, createdAt: today() });
-        updatedAsset = { ...asset, ...form, clientId: user.role === "admin" ? form.clientId : asset.clientId, assetCode: nextAssetCode, lifecycle };
+        updatedAsset = { ...asset, ...form, clientId: user.role === "admin" ? form.clientId : asset.clientId, lifecycle };
         return updatedAsset;
       })
       };
@@ -3033,18 +3115,16 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
                     </dl>
                   </div>
                 </div>
+                <AssetMediaPanel
+                  asset={selected}
+                  onAddImage={(imageUrl) => addImage(selected.id, imageUrl)}
+                  onAddDocument={(documentName) => addDocument(selected.id, documentName)}
+                  onRemoveImage={(imageUrl) => removeImage(selected.id, imageUrl)}
+                  onRemoveDocument={(_document, index) => removeDocument(selected.id, index)}
+                />
                 {user.role === "admin" && (
-                  <>
-                    <AssetMediaPanel
-                      asset={selected}
-                      onAddImage={(imageUrl) => addImage(selected.id, imageUrl)}
-                      onAddDocument={(documentName) => addDocument(selected.id, documentName)}
-                      onRemoveImage={(imageUrl) => removeImage(selected.id, imageUrl)}
-                      onRemoveDocument={(_document, index) => removeDocument(selected.id, index)}
-                    />
-                    <LifecycleManager asset={selected} onAddLifecycle={(form) => addLifecycle(selected.id, form)} />
-                  </>
-            )}
+                  <LifecycleManager asset={selected} onAddLifecycle={(form) => addLifecycle(selected.id, form)} />
+                )}
               </>
             )}
             {assetView === "edit" && (
