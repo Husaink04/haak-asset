@@ -970,9 +970,10 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
               type="button"
               onClick={onInstallApp}
               aria-label="Install app"
-              title="Install app"
+              title={shellCollapsed ? "Install app" : undefined}
             >
               <Download size={18} />
+              <span>Install app</span>
             </button>
           )}
           <button
@@ -980,10 +981,11 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
             type="button"
             onClick={onToggleTheme}
             aria-label={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
-            title={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
+            title={shellCollapsed ? (isDarkTheme ? "Switch to light mode" : "Switch to dark mode") : undefined}
             aria-pressed={isDarkTheme}
           >
             {isDarkTheme ? <Sun size={18} /> : <Moon size={18} />}
+            <span>{isDarkTheme ? "Light mode" : "Dark mode"}</span>
           </button>
           <button className="logout" onClick={onLogout} title={shellCollapsed ? "Logout" : undefined} aria-label="Logout"><LogOut size={18} /> <span>Logout</span></button>
         </div>
@@ -2018,10 +2020,10 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
             <p>Monitor company coverage, asset condition, service due dates, and client issue status from one focused dashboard.</p>
           </div>
           <div className="dashboard-health">
-            <span><strong>{data.clients.length}</strong> Companies</span>
-            <span><strong>{scopedAssets.length}</strong> Assets</span>
-            <span><strong>{openAppeals.length}</strong> Open issues</span>
-            <span><strong>{dueServices.length}</strong> Service due</span>
+            <span><strong>{data.clients.length}</strong><small className="dashboard-health-label">Companies</small></span>
+            <span><strong>{scopedAssets.length}</strong><small className="dashboard-health-label">Assets</small></span>
+            <span><strong>{openAppeals.length}</strong><small className="dashboard-health-label">Open issues</small></span>
+            <span><strong>{dueServices.length}</strong><small className="dashboard-health-label">Service due</small></span>
           </div>
         </div>
 

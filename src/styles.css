@@ -1236,27 +1236,51 @@ nav button.active {
 
 .theme-toggle,
 .install-button {
-  width: 44px;
-  min-height: 44px;
-  justify-self: center;
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  padding: 0;
+  padding: 12px 14px;
   border: 1px solid rgba(226, 232, 240, 0.16);
   background: rgba(255, 255, 255, 0.04);
-  transition: background 180ms ease, border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+  border-radius: 8px;
+  transition: all 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
 }
 
 .theme-toggle svg,
 .install-button svg {
   flex: 0 0 auto;
-  transition: transform 220ms ease;
+  transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-toggle span,
+.install-button span {
+  display: inline-block;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  margin-left: 0;
+  transition: max-width 1.2s cubic-bezier(0.4, 0, 0.2, 1), 
+              opacity 0.8s ease, 
+              margin-left 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 700;
 }
 
 .theme-toggle:hover,
 .install-button:hover {
   border-color: rgba(239, 31, 36, 0.55);
-  box-shadow: 0 10px 22px rgba(239, 31, 36, 0.16);
-  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(239, 31, 36, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.theme-toggle:hover span,
+.install-button:hover span {
+  max-width: 120px;
+  opacity: 1;
+  margin-left: 8px;
 }
 
 .theme-toggle:hover svg,
@@ -1301,8 +1325,24 @@ nav button.active {
 
 .sidebar-collapsed .theme-toggle,
 .sidebar-collapsed .install-button {
-  width: 100%;
-  justify-self: stretch;
+  width: 44px;
+  min-height: 44px;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(226, 232, 240, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  align-self: center;
+  justify-self: center;
+  border-radius: 8px;
+  transition: background 180ms ease, border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+
+.sidebar-collapsed .theme-toggle:hover,
+.sidebar-collapsed .install-button:hover {
+  border-color: rgba(239, 31, 36, 0.55);
+  box-shadow: 0 10px 22px rgba(239, 31, 36, 0.16);
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .sidebar-collapsed nav button.active {
@@ -1445,29 +1485,41 @@ header h1 {
 
 .dashboard-health {
   display: grid;
-  grid-template-columns: repeat(4, minmax(82px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
 .dashboard-health span {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   min-width: 0;
   min-height: 86px;
-  align-content: center;
-  padding: 14px 12px;
+  padding: 12px 6px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #f8fafc;
-  color: #64748b;
-  font-weight: 800;
   text-align: center;
 }
 
 .dashboard-health strong {
   color: var(--haak-ink);
   font-size: 26px;
-  line-height: 1;
+  line-height: 1.1;
+}
+
+.dashboard-health-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+[data-theme="dark"] .dashboard-health-label {
+  color: #a8b5c7;
 }
 
 .dashboard-kpis .stat {
@@ -3939,27 +3991,12 @@ dl dt {
 
   .sidebar-actions,
   .logout,
-  .collapse-toggle {
+  .collapse-toggle,
+  .theme-toggle,
+  .install-button {
     width: 100%;
   }
 
-  .theme-toggle {
-    width: 44px;
-    justify-self: start;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .install-button {
-    width: 44px;
-    justify-self: start;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .stats-grid,
-  .dashboard-health,
-  .service-summary,
   .service-record-meta,
   .asset-detail,
   .message-form,
@@ -4000,9 +4037,6 @@ dl dt {
   .asset-review-grid,
   .asset-subnav,
   .settings-row,
-  .companies-hero-stats,
-  .company-health-grid,
-  .company-overview-grid,
   .company-editor-actions {
     grid-template-columns: 1fr;
   }
@@ -4101,5 +4135,96 @@ dl dt {
 
   .notification-card-head {
     display: grid;
+  }
+
+  /* Keep stats/numbers grids in a single line on mobile */
+  .stats-grid,
+  .dashboard-health,
+  .service-summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .companies-hero-stats,
+  .company-health-grid,
+  .company-overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  /* Make stat cards very compact for mobile horizontal layout */
+  .dashboard-health span,
+  .stat,
+  .companies-hero-stat,
+  .company-health-card,
+  .company-overview-card {
+    padding: 10px 4px !important;
+    min-height: 80px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    gap: 2px !important;
+  }
+
+  /* Hide icon on mobile inside stats cards to save space */
+  .stat > div:first-child {
+    display: none !important;
+  }
+
+  .dashboard-health span strong,
+  .stat strong,
+  .companies-hero-stat strong,
+  .company-health-card strong,
+  .company-overview-card strong {
+    font-size: 18px !important;
+    margin-top: 0 !important;
+    line-height: 1.1 !important;
+  }
+
+  .dashboard-health-label,
+  .stat span,
+  .companies-hero-stat small,
+  .company-health-card small,
+  .company-overview-card small {
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+    font-weight: 700 !important;
+    color: #64748b !important;
+    word-break: break-word !important;
+  }
+
+  [data-theme="dark"] .dashboard-health-label,
+  [data-theme="dark"] .stat span,
+  [data-theme="dark"] .companies-hero-stat small,
+  [data-theme="dark"] .company-health-card small,
+  [data-theme="dark"] .company-overview-card small {
+    color: #a8b5c7 !important;
+  }
+
+  /* Sub-text labels inside stats cards on mobile */
+  .companies-hero-stat span,
+  .company-health-card span,
+  .company-overview-card span {
+    font-size: 9px !important;
+    line-height: 1.1 !important;
+    color: #94a3b8 !important;
+    display: block !important;
+    word-break: break-word !important;
+  }
+
+  [data-theme="dark"] .companies-hero-stat span,
+  [data-theme="dark"] .company-health-card span,
+  [data-theme="dark"] .company-overview-card span {
+    color: #64748b !important;
+  }
+
+  /* Ensure preferences button text is always visible on mobile since hover is not supported */
+  .theme-toggle span,
+  .install-button span {
+    max-width: 120px !important;
+    opacity: 1 !important;
+    margin-left: 8px !important;
   }
 }
