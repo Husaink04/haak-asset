@@ -1060,22 +1060,25 @@ app.put("/api/state", requireAuth, async (request, response) => {
     const mergedState = await mergePasswords(lockedState, currentState);
     await writeState(mergedState);
 
-    // Send welcome emails to newly added clients.
-    for (const item of newClientsToWelcome) {
-      try {
-        await sendClientWelcomeEmail(item.client, item.user, item.plainPassword);
-      } catch (error) {
-        console.warn("Welcome email delivery failed for client:", item.user.email, error);
-      }
-    }
-
-    try {
-      await emailNewNotifications(newNotificationsFromState(mergedState, currentState), mergedState);
-    } catch (error) {
-      console.warn("Notification email delivery failed.");
-      console.warn(error);
-    }
     response.json(publicState(mergedState));
+
+    // Email delivery should not hold the state sync response open.
+    Promise.resolve().then(async () => {
+      for (const item of newClientsToWelcome) {
+        try {
+          await sendClientWelcomeEmail(item.client, item.user, item.plainPassword);
+        } catch (error) {
+          console.warn("Welcome email delivery failed for client:", item.user.email, error);
+        }
+      }
+
+      try {
+        await emailNewNotifications(newNotificationsFromState(mergedState, currentState), mergedState);
+      } catch (error) {
+        console.warn("Notification email delivery failed.");
+        console.warn(error);
+      }
+    });
   } catch (error) {
     sendApiError(response, error);
   }
@@ -1560,7 +1563,8 @@ app.post("/api/upload", requireAuth, (request, response) => {
             console.error("Failed to delete local temporary upload file:", unlinkError);
           }
         } catch (cloudinaryError) {
-          console.error("Cloudinary upload failed, falling back to local storage:", cloudinaryError);
+          console.error("Cloudinary upload failed:", cloudinaryError);
+          return response.status(502).json({ error: "Cloudinary upload failed. Check the Cloudinary environment variables on the server." });
         }
       }
 

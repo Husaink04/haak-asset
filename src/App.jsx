@@ -495,12 +495,16 @@ function resolveMediaUrl(value) {
   if (!value) return "";
   const raw = String(value).trim();
   if (!raw) return "";
-  if (raw.startsWith("/uploads/")) return raw;
+  if (raw.startsWith("/uploads/")) {
+    try {
+      const apiBase = new URL(API_URL, window.location.origin);
+      return `${apiBase.origin}${raw}`;
+    } catch {
+      return raw;
+    }
+  }
   try {
     const url = new URL(raw, window.location.origin);
-    if (url.pathname.startsWith("/uploads/")) {
-      return `${url.pathname}${url.search}${url.hash}`;
-    }
     return raw.startsWith("/") ? raw : url.href;
   } catch {
     return raw;
