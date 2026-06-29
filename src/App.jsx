@@ -1453,7 +1453,7 @@ function CompanyList({ clients, assets }) {
         {clients.map((client) => (
           <div className="company-row" key={client.id}>
             <CompanyLogo client={client} />
-            <span>
+            <span className="company-row-content">
               <strong>{client.companyName}</strong>
               <small>{client.contactPerson} - {client.email}</small>
             </span>
@@ -2072,7 +2072,7 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
               {data.clients.map((client) => (
                 <div className="company-row" key={client.id}>
                   <CompanyLogo client={client} />
-                  <span>
+                  <span className="company-row-content">
                     <strong>{client.companyName}</strong>
                     <small>{data.assets.filter((asset) => asset.clientId === client.id).length} assets / {client.contactPerson}</small>
                   </span>
