@@ -1387,6 +1387,7 @@ app.post("/api/assets", requireAuth, async (request, response) => {
     warrantyEndDate: form.warrantyEndDate || "",
     location: form.location || "",
     branchId: form.branchId || "",
+    department: form.department || "",
     status: form.status || "active",
     notes: form.notes || "",
     images: form.images || (form.image ? [form.image] : []),

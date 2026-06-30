@@ -89,6 +89,7 @@ export async function ensureNormalizedSchema() {
       warranty_end_date DATE,
       location TEXT NOT NULL DEFAULT '',
       branch_id TEXT DEFAULT NULL,
+      department TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'active',
       notes TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -97,6 +98,7 @@ export async function ensureNormalizedSchema() {
   `);
   await query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS user_name TEXT NOT NULL DEFAULT ''");
   await query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS branch_id TEXT");
+  await query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS department TEXT NOT NULL DEFAULT ''");
 
   await query(`
     CREATE TABLE IF NOT EXISTS asset_categories (
@@ -332,6 +334,7 @@ export async function readState() {
       warrantyEndDate: dateValue(asset.warranty_end_date) || "",
       location: asset.location,
       branchId: asset.branch_id || "",
+      department: asset.department || "",
       status: asset.status,
       notes: asset.notes,
       images: images.rows.filter((image) => image.asset_id === asset.id).map((image) => image.url),
@@ -484,8 +487,8 @@ async function writeStateOnce(state) {
 
     for (const asset of state.assets || []) {
       await client.query(
-        `INSERT INTO assets (id, asset_code, client_id, name, user_name, category, brand, model, serial_number, purchase_date, warranty_end_date, location, branch_id, status, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+        `INSERT INTO assets (id, asset_code, client_id, name, user_name, category, brand, model, serial_number, purchase_date, warranty_end_date, location, branch_id, department, status, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
         [
           asset.id,
           asset.assetCode,
@@ -500,6 +503,7 @@ async function writeStateOnce(state) {
           asset.warrantyEndDate || null,
           asset.location || "",
           asset.branchId || null,
+          asset.department || "",
           asset.status || "active",
           asset.notes || ""
         ]

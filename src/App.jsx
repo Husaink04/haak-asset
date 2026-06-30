@@ -2338,6 +2338,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
     assetCode: "",
     clientId: lockedClientId || clients[0]?.id || "",
     branchId: "",
+    department: "",
     category: categories[0] || "",
     userName: "",
     location: "",
@@ -2362,10 +2363,16 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
       const branches = clientBranches(nextClient);
       const nextBranchId = branches.some((branch) => branch.id === current.branchId) ? current.branchId : (branches[0]?.id || "");
       const nextCategory = categories.includes(current.category) ? current.category : (categories[0] || "");
+      
+      const selectedBranchObj = branches.find((b) => b.id === nextBranchId);
+      const branchDepts = selectedBranchObj?.departments || [];
+      const nextDept = branchDepts.includes(current.department) ? current.department : (branchDepts[0] || "");
+
       return {
         ...current,
         clientId: nextClientId,
         branchId: nextBranchId,
+        department: nextDept,
         category: nextCategory,
         assetCode: generateAssetCode(clients, existingAssets, nextClientId, nextCategory)
       };
@@ -2380,8 +2387,16 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
         const nextCategory = field === "category" ? value : next.category;
         next.assetCode = generateAssetCode(clients, existingAssets, nextClientId, nextCategory);
         if (field === "clientId") {
-          next.branchId = clientBranches(clients.find((client) => client.id === nextClientId))[0]?.id || "";
+          const client = clients.find((c) => c.id === nextClientId);
+          const branches = clientBranches(client);
+          next.branchId = branches[0]?.id || "";
+          next.department = branches[0]?.departments?.[0] || "";
         }
+      }
+      if (field === "branchId") {
+        const client = clients.find((c) => c.id === next.clientId);
+        const branchObj = clientBranches(client).find((b) => b.id === value);
+        next.department = branchObj?.departments?.[0] || "";
       }
       return next;
     });
@@ -2427,11 +2442,13 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
     onCreate(form);
     const defaultClientId = lockedClientId || clients[0]?.id || "";
     const defaultCategory = categories[0] || "";
+    const defaultBranches = clientBranches(clients.find((client) => client.id === defaultClientId));
     setForm({
       name: "",
       assetCode: generateAssetCode(clients, existingAssets, defaultClientId, defaultCategory),
       clientId: defaultClientId,
-      branchId: clientBranches(clients.find((client) => client.id === defaultClientId))[0]?.id || "",
+      branchId: defaultBranches[0]?.id || "",
+      department: defaultBranches[0]?.departments?.[0] || "",
       category: defaultCategory,
       userName: "",
       location: "",
@@ -2452,9 +2469,8 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
 
   function canContinue() {
     if (step === 0) return Boolean(form.clientId && form.branchId && form.location.trim() && form.userName.trim());
-    if (step === 1) return Boolean(form.category && form.name.trim() && form.brand.trim() && form.model.trim() && form.serialNumber.trim());
-    if (step === 2) return Boolean(form.status && form.purchaseDate && form.warrantyEndDate && form.notes.trim());
-    return Boolean(form.image && form.documents.length > 0);
+    if (step === 1) return Boolean(form.category && form.name.trim());
+    return true;
   }
 
   function goToStep(index) {
@@ -2519,6 +2535,23 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
               ))}
             </select>
           </label>
+          {(() => {
+            const client = clients.find((c) => c.id === form.clientId);
+            const branches = clientBranches(client);
+            const selectedBranch = branches.find((b) => b.id === form.branchId);
+            const depts = selectedBranch?.departments || [];
+            if (depts.length === 0) return null;
+            return (
+              <label>
+                Department
+                <select value={form.department} onChange={(event) => update("department", event.target.value)}>
+                  {depts.map((dept) => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+              </label>
+            );
+          })()}
           <label>
             Location *
             <input placeholder="Office, department, site, or room" value={form.location} onChange={(event) => update("location", event.target.value)} required />
@@ -2650,7 +2683,15 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete, canDelete
     setForm((current) => {
       const next = { ...current, [field]: value };
       if (field === "clientId") {
-        next.branchId = clientBranches(clients.find((client) => client.id === value))[0]?.id || "";
+        const client = clients.find((client) => client.id === value);
+        const branches = clientBranches(client);
+        next.branchId = branches[0]?.id || "";
+        next.department = branches[0]?.departments?.[0] || "";
+      }
+      if (field === "branchId") {
+        const client = clients.find((c) => c.id === next.clientId);
+        const branchObj = clientBranches(client).find((b) => b.id === value);
+        next.department = branchObj?.departments?.[0] || "";
       }
       return next;
     });
@@ -2716,6 +2757,20 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete, canDelete
           <option key={branch.id} value={branch.id}>{branch.name}</option>
         ))}
       </select>
+      {(() => {
+        const client = clients.find((c) => c.id === form.clientId);
+        const branches = clientBranches(client);
+        const selectedBranch = branches.find((b) => b.id === form.branchId);
+        const depts = selectedBranch?.departments || [];
+        if (depts.length === 0) return null;
+        return (
+          <select value={form.department} onChange={(event) => update("department", event.target.value)}>
+            {depts.map((dept) => (
+              <option key={dept} value={dept}>{dept}</option>
+            ))}
+          </select>
+        );
+      })()}
       <select value={form.category} onChange={(event) => update("category", event.target.value)}>
         {categories.map((category) => <option key={category} value={category}>{category}</option>)}
       </select>
@@ -3282,6 +3337,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
                     <dl className="asset-facts">
                       <div><dt>Client</dt><dd>{data.clients.find((client) => client.id === selected.clientId)?.companyName || "Not assigned"}</dd></div>
                       <div><dt>Branch</dt><dd>{branchName(data.clients.find((client) => client.id === selected.clientId), selected.branchId)}</dd></div>
+                      {selected.department && <div><dt>Department</dt><dd>{selected.department}</dd></div>}
                       <div><dt>Brand / model</dt><dd>{selected.brand || "Not recorded"} / {selected.model || "Not recorded"}</dd></div>
                       <div><dt>Location</dt><dd>{selected.location || "Not recorded"}</dd></div>
                       <div><dt>Warranty ends</dt><dd>{selected.warrantyEndDate || "Not recorded"}</dd></div>
