@@ -32,6 +32,7 @@ export async function ensureNormalizedSchema() {
       address TEXT NOT NULL DEFAULT '',
       logo_url TEXT NOT NULL DEFAULT '',
       asset_categories JSONB NOT NULL DEFAULT '[]'::jsonb,
+      branches JSONB NOT NULL DEFAULT '[]'::jsonb,
       amc_start_date DATE,
       amc_end_date DATE,
       amc_term TEXT NOT NULL DEFAULT '',
@@ -43,6 +44,7 @@ export async function ensureNormalizedSchema() {
   `);
 
   await query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS asset_categories JSONB NOT NULL DEFAULT '[]'::jsonb");
+  await query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS branches JSONB NOT NULL DEFAULT '[]'::jsonb");
   await query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS amc_start_date DATE");
   await query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS amc_end_date DATE");
   await query("ALTER TABLE companies ADD COLUMN IF NOT EXISTS amc_term TEXT NOT NULL DEFAULT ''");
@@ -86,6 +88,7 @@ export async function ensureNormalizedSchema() {
       purchase_date DATE,
       warranty_end_date DATE,
       location TEXT NOT NULL DEFAULT '',
+      branch_id TEXT DEFAULT NULL,
       status TEXT NOT NULL DEFAULT 'active',
       notes TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -93,6 +96,7 @@ export async function ensureNormalizedSchema() {
     )
   `);
   await query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS user_name TEXT NOT NULL DEFAULT ''");
+  await query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS branch_id TEXT");
 
   await query(`
     CREATE TABLE IF NOT EXISTS asset_categories (
@@ -306,6 +310,7 @@ export async function readState() {
       phone: company.phone,
       address: company.address,
       logoUrl: company.logo_url,
+      branches: Array.isArray(company.branches) ? company.branches : [],
       assetCategories: Array.isArray(company.asset_categories) && company.asset_categories.length > 0 ? company.asset_categories : derivedCategories,
       amcStartDate: dateValue(company.amc_start_date) || "",
       amcEndDate: dateValue(company.amc_end_date) || "",
@@ -326,6 +331,7 @@ export async function readState() {
       purchaseDate: dateValue(asset.purchase_date) || "",
       warrantyEndDate: dateValue(asset.warranty_end_date) || "",
       location: asset.location,
+      branchId: asset.branch_id || "",
       status: asset.status,
       notes: asset.notes,
       images: images.rows.filter((image) => image.asset_id === asset.id).map((image) => image.url),
@@ -446,8 +452,8 @@ async function writeStateOnce(state) {
 
     for (const company of state.clients || []) {
       await client.query(
-        `INSERT INTO companies (id, company_name, contact_person, email, phone, address, logo_url, asset_categories, amc_start_date, amc_end_date, amc_term, amc_renewal_notice_sent_at, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13)`,
+        `INSERT INTO companies (id, company_name, contact_person, email, phone, address, logo_url, asset_categories, branches, amc_start_date, amc_end_date, amc_term, amc_renewal_notice_sent_at, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11, $12, $13, $14)`,
         [
           company.id,
           company.companyName,
@@ -457,6 +463,7 @@ async function writeStateOnce(state) {
           company.address || "",
           company.logoUrl || "",
           JSON.stringify(company.assetCategories || []),
+          JSON.stringify(company.branches || []),
           company.amcStartDate || null,
           company.amcEndDate || null,
           company.amcTerm || "",
@@ -477,8 +484,8 @@ async function writeStateOnce(state) {
 
     for (const asset of state.assets || []) {
       await client.query(
-        `INSERT INTO assets (id, asset_code, client_id, name, user_name, category, brand, model, serial_number, purchase_date, warranty_end_date, location, status, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+        `INSERT INTO assets (id, asset_code, client_id, name, user_name, category, brand, model, serial_number, purchase_date, warranty_end_date, location, branch_id, status, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
         [
           asset.id,
           asset.assetCode,
@@ -492,6 +499,7 @@ async function writeStateOnce(state) {
           asset.purchaseDate || null,
           asset.warrantyEndDate || null,
           asset.location || "",
+          asset.branchId || null,
           asset.status || "active",
           asset.notes || ""
         ]

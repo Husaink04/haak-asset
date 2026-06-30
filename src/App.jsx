@@ -1282,7 +1282,7 @@ function CompanyForm({ onCreate, className = "" }) {
 
   function canContinue() {
     if (step === 0) return Boolean(form.companyName.trim() && form.contactPerson.trim() && isValidEmail(form.email));
-    if (step === 1) return form.branches.length > 0 && form.branches.every((branch) => branch.name.trim());
+    if (step === 1) return form.branches.some((branch) => branch.name.trim());
     if (step === 2) return Boolean(form.amcStartDate && form.amcTerm && form.amcEndDate && form.assetCategoriesText.trim());
     if (step === 3) return Boolean(form.logoUrl);
     return Boolean(form.loginEmail.trim() && form.loginPassword.trim());
