@@ -2506,7 +2506,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
         form.notes.trim()
       );
     }
-    return Boolean(form.image && form.documents.length > 0);
+    return Boolean(form.image);
   }
 
   function goToStep(index) {
@@ -2687,7 +2687,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
           </div>
 
           <label className="file-field">
-            Upload document *
+            Upload document
             <input type="file" accept=".pdf,.doc,.docx" onChange={uploadAssetDocument} disabled={uploadingDocument} />
             <span><Paperclip size={15} /> Upload document (.doc/.docx/.pdf, max {MAX_UPLOAD_MB} MB)</span>
           </label>
