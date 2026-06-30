@@ -434,6 +434,26 @@ function clientCategories(client, fallbackCategories = []) {
   return client?.assetCategories?.length ? client.assetCategories : fallbackCategories;
 }
 
+function normalizeBranches(branches, fallbackName = "Main Branch") {
+  const source = Array.isArray(branches) ? branches : [];
+  const normalized = source
+    .map((branch) => ({
+      id: branch?.id || uid("br"),
+      name: String(branch?.name || "").trim(),
+      address: String(branch?.address || "").trim()
+    }))
+    .filter((branch) => branch.name);
+  return normalized.length > 0 ? normalized : [{ id: uid("br"), name: fallbackName, address: "" }];
+}
+
+function clientBranches(client) {
+  return normalizeBranches(client?.branches, "Main Branch");
+}
+
+function branchName(client, branchId) {
+  return clientBranches(client).find((branch) => branch.id === branchId)?.name || "Main Branch";
+}
+
 function isPriorityAsset(asset) {
   return ["in_service", "repairing", "damaged"].includes(asset.status);
 }
@@ -670,6 +690,25 @@ function unreadNotificationCount(notifications, user) {
   return scopedNotifications(notifications, user).filter((notification) => !(notification.readBy || []).includes(user.id)).length;
 }
 
+function sidebarBadgeCounts({ user, data, scopedAssets, scopedAppeals }) {
+  if (!user) return {};
+  const visibleNotifications = scopedNotifications(data.notifications || [], user);
+  const unreadIssues = visibleNotifications.filter((notification) =>
+    !(notification.readBy || []).includes(user.id) &&
+    notification.entityType === "appeal"
+  ).length;
+  const serviceRecords = getScopedServiceRecords(data.serviceRecords || [], scopedAssets || []);
+  const dueServices = serviceRecords.filter((record) =>
+    isPriorityServiceRecord(record) &&
+    record.nextServiceDue &&
+    record.nextServiceDue <= today()
+  ).length;
+  return {
+    appeals: unreadIssues || (scopedAppeals || []).filter((appeal) => !["resolved", "closed", "approved"].includes(appeal.status)).length,
+    service: dueServices || serviceRecords.filter(isPriorityServiceRecord).length
+  };
+}
+
 function statusClass(status) {
   return `badge ${String(status || "open").replace("_", "-")}`;
 }
@@ -859,7 +898,7 @@ function NotificationCenter({ user, notifications, unreadCount, onMarkRead, onCl
   );
 }
 
-function Shell({ user, children, view, setView, onLogout, headerAction, notice, clientBrand, apiStatus = "offline", theme = "light", onToggleTheme, notifications = [], unreadCount = 0, onMarkNotificationsRead, onClearNotifications, showInstallButton = true, onInstallApp }) {
+function Shell({ user, children, view, setView, onLogout, headerAction, notice, clientBrand, apiStatus = "offline", theme = "light", onToggleTheme, notifications = [], unreadCount = 0, badgeCounts = {}, onMarkNotificationsRead, onClearNotifications, showInstallButton = true, onInstallApp }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(() => window.matchMedia("(max-width: 1180px)").matches);
@@ -953,6 +992,7 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
             <button key={id} className={view === id ? "active" : ""} onClick={() => selectView(id)} title={shellCollapsed ? label : undefined} aria-label={label}>
               <Icon size={18} />
               <span className="nav-label">{label}</span>
+              {badgeCounts[id] > 0 && <span className="sidebar-count">{badgeCounts[id]}</span>}
             </button>
           ))}
         </nav>
@@ -1138,7 +1178,7 @@ function AssetVisual({ asset, className = "" }) {
 }
 
 function CompanyForm({ onCreate, className = "" }) {
-  const steps = ["Company", "AMC", "Logo", "Login"];
+  const steps = ["Company", "Branches", "AMC", "Logo", "Login"];
   const [step, setStep] = useState(0);
   const [maxUnlockedStep, setMaxUnlockedStep] = useState(0);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -1149,6 +1189,7 @@ function CompanyForm({ onCreate, className = "" }) {
     email: "",
     phone: "",
     address: "",
+    branches: [{ id: uid("br"), name: "Main Branch", address: "" }],
     logoUrl: "",
     assetCategoriesText: "Laptop, Printer",
     amcStartDate: today(),
@@ -1170,6 +1211,29 @@ function CompanyForm({ onCreate, className = "" }) {
       }
       return next;
     });
+  }
+
+  function updateBranch(index, field, value) {
+    setForm((current) => ({
+      ...current,
+      branches: current.branches.map((branch, branchIndex) =>
+        branchIndex === index ? { ...branch, [field]: value } : branch
+      )
+    }));
+  }
+
+  function addBranch() {
+    setForm((current) => ({
+      ...current,
+      branches: [...current.branches, { id: uid("br"), name: "", address: "" }]
+    }));
+  }
+
+  function removeBranch(index) {
+    setForm((current) => ({
+      ...current,
+      branches: normalizeBranches(current.branches.filter((_, branchIndex) => branchIndex !== index))
+    }));
   }
 
   async function uploadLogo(event) {
@@ -1203,6 +1267,7 @@ function CompanyForm({ onCreate, className = "" }) {
       email: "",
       phone: "",
       address: "",
+      branches: [{ id: uid("br"), name: "Main Branch", address: "" }],
       logoUrl: "",
       assetCategoriesText: "Laptop, Printer",
       amcStartDate: today(),
@@ -1216,9 +1281,10 @@ function CompanyForm({ onCreate, className = "" }) {
   }
 
   function canContinue() {
-    if (step === 0) return Boolean(form.companyName.trim() && form.contactPerson.trim() && form.email.trim());
-    if (step === 1) return Boolean(form.amcStartDate && form.amcTerm);
-    if (step === 2) return true;
+    if (step === 0) return Boolean(form.companyName.trim() && form.contactPerson.trim() && isValidEmail(form.email));
+    if (step === 1) return form.branches.length > 0 && form.branches.every((branch) => branch.name.trim());
+    if (step === 2) return Boolean(form.amcStartDate && form.amcTerm && form.amcEndDate && form.assetCategoriesText.trim());
+    if (step === 3) return Boolean(form.logoUrl);
     return Boolean(form.loginEmail.trim() && form.loginPassword.trim());
   }
 
@@ -1287,6 +1353,29 @@ function CompanyForm({ onCreate, className = "" }) {
 
       {step === 1 && (
         <div className="wizard-step company-wizard-step">
+          <h3>Company branches</h3>
+          <p>Add every branch where this company can hold assets.</p>
+          <div className="branch-editor-list">
+            {form.branches.map((branch, index) => (
+              <div className="branch-editor-row" key={branch.id}>
+                <label>
+                  Branch name *
+                  <input placeholder="Main Branch" value={branch.name} onChange={(event) => updateBranch(index, "name", event.target.value)} required />
+                </label>
+                <label>
+                  Branch address
+                  <input placeholder="Branch address or area" value={branch.address} onChange={(event) => updateBranch(index, "address", event.target.value)} />
+                </label>
+                <button className="secondary" type="button" onClick={() => removeBranch(index)} disabled={form.branches.length === 1}>Remove</button>
+              </div>
+            ))}
+          </div>
+          <button className="secondary" type="button" onClick={addBranch}><Plus size={16} /> Add branch</button>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="wizard-step company-wizard-step">
           <h3>AMC and categories</h3>
           <p>Set the contract period and the asset categories that belong to this company.</p>
           <label>
@@ -1310,7 +1399,7 @@ function CompanyForm({ onCreate, className = "" }) {
         </div>
       )}
 
-      {step === 2 && (
+      {step === 3 && (
         <div className="wizard-step company-wizard-step">
           <h3>Company logo</h3>
           <p>Upload a company logo. It will appear in company records and client pages.</p>
@@ -1330,7 +1419,7 @@ function CompanyForm({ onCreate, className = "" }) {
         </div>
       )}
 
-      {step === 3 && (
+      {step === 4 && (
         <div className="wizard-step company-wizard-step">
           <h3>Client login</h3>
           <p>Create the login ID and password this company will use in the Client portal.</p>
@@ -1474,6 +1563,7 @@ function CompanyList({ clients, assets }) {
 function CompanyEditor({ client, assets, onUpdate, onDelete }) {
   const [form, setForm] = useState({
     ...client,
+    branches: normalizeBranches(client.branches),
     assetCategoriesText: clientCategories(client).join(", "),
     renewalTerm: client.amcTerm || "1Y"
   });
@@ -1502,6 +1592,7 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
     const { assetCategoriesText, renewalTerm, ...company } = nextForm;
     return {
       ...company,
+      branches: normalizeBranches(company.branches),
       assetCategories: assetCategoriesText
         .split(",")
         .map((category) => category.trim())
@@ -1539,6 +1630,29 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
       setUploadingLogo(false);
       if (target) target.value = "";
     }
+  }
+
+  function updateBranch(index, field, value) {
+    setForm((current) => ({
+      ...current,
+      branches: normalizeBranches(current.branches).map((branch, branchIndex) =>
+        branchIndex === index ? { ...branch, [field]: value } : branch
+      )
+    }));
+  }
+
+  function addBranch() {
+    setForm((current) => ({
+      ...current,
+      branches: [...normalizeBranches(current.branches), { id: uid("br"), name: "", address: "" }]
+    }));
+  }
+
+  function removeBranch(index) {
+    setForm((current) => ({
+      ...current,
+      branches: normalizeBranches(normalizeBranches(current.branches).filter((_, branchIndex) => branchIndex !== index))
+    }));
   }
 
   function submit(event) {
@@ -1614,11 +1728,28 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
               Phone
               <input inputMode="numeric" placeholder="Phone" value={form.phone} onChange={(event) => update("phone", event.target.value)} maxLength={10} />
             </label>
+            <label>
+              Address
+              <textarea placeholder="Address" value={form.address} onChange={(event) => update("address", event.target.value)} maxLength={150} />
+            </label>
           </div>
-          <label>
-            Address
-            <textarea placeholder="Address" value={form.address} onChange={(event) => update("address", event.target.value)} maxLength={150} />
-          </label>
+          <div className="branch-editor-list company-editor-branches">
+            <strong>Branches</strong>
+            {normalizeBranches(form.branches).map((branch, index) => (
+              <div className="branch-editor-row" key={branch.id}>
+                <label>
+                  Branch name *
+                  <input placeholder="Branch name" value={branch.name} onChange={(event) => updateBranch(index, "name", event.target.value)} required />
+                </label>
+                <label>
+                  Branch address
+                  <input placeholder="Branch address or area" value={branch.address} onChange={(event) => updateBranch(index, "address", event.target.value)} />
+                </label>
+                <button className="secondary" type="button" onClick={() => removeBranch(index)} disabled={normalizeBranches(form.branches).length === 1}>Remove</button>
+              </div>
+            ))}
+            <button className="secondary" type="button" onClick={addBranch}><Plus size={16} /> Add branch</button>
+          </div>
         </section>
 
         <section className="company-editor-section">
@@ -1763,6 +1894,7 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
       email: form.email,
       phone: form.phone,
       address: form.address,
+      branches: normalizeBranches(form.branches),
       logoUrl: form.logoUrl,
       assetCategories: form.assetCategoriesText
         .split(",")
@@ -2004,7 +2136,7 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
   );
 }
 
-function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
+function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand, onOpenAsset, onOpenAppeal, onOpenService }) {
   const scopedServiceRecords = getScopedServiceRecords(data.serviceRecords, scopedAssets);
   const serviceWindowEnd = new Date();
   serviceWindowEnd.setDate(serviceWindowEnd.getDate() + 30);
@@ -2041,14 +2173,14 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
                 const asset = data.assets.find((item) => item.id === appeal.assetId);
                 const client = data.clients.find((item) => item.id === appeal.clientId);
                 return (
-                  <div className="dashboard-list-item" key={appeal.id}>
+                  <button className="dashboard-list-item clickable-list-item" type="button" key={appeal.id} onClick={() => onOpenAppeal?.(appeal.id)}>
                     <div>
                       <span className={statusClass(appeal.status)}>{formatStatusLabel(appeal.status)}</span>
                       <strong>{appeal.title}</strong>
                       <small>{asset?.name || "Unknown asset"} / {client?.companyName || "Unknown company"}</small>
                     </div>
                     <small>{formatTimestamp(appeal.updatedAt)}</small>
-                  </div>
+                  </button>
                 );
               }) : <div className="empty-inline">No appeal activity yet.</div>}
             </div>
@@ -2059,14 +2191,14 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
               {serviceDueList.length > 0 ? serviceDueList.map((record) => {
                 const asset = data.assets.find((item) => item.id === record.assetId);
                 return (
-                  <div className="dashboard-list-item" key={record.id}>
+                  <button className="dashboard-list-item clickable-list-item" type="button" key={record.id} onClick={() => onOpenService?.(record.id)}>
                     <div>
                       <span className={statusClass(record.status)}>{formatStatusLabel(record.status)}</span>
                       <strong>{asset?.name || "Unknown asset"}</strong>
                       <small>{record.serviceType} / {record.technicianName || "Technician not assigned"}</small>
                     </div>
                     <small>{record.nextServiceDue || "No due date"}</small>
-                  </div>
+                  </button>
                 );
               }) : <div className="empty-inline">No service due in the current window.</div>}
             </div>
@@ -2092,7 +2224,7 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
           <CollapsiblePanel eyebrow="Asset condition" title="Priority assets" badge={<span className="badge in-service">{attentionAssets.length}</span>}>
             <div className="asset-list compact">
               {attentionAssets.length > 0 ? attentionAssets.map((asset) => (
-                <AssetRow key={asset.id} asset={asset} client={data.clients.find((client) => client.id === asset.clientId)} />
+                <AssetRow key={asset.id} asset={asset} client={data.clients.find((client) => client.id === asset.clientId)} onSelect={() => onOpenAsset?.(asset.id)} />
               )) : <div className="empty-inline">All assets are currently active.</div>}
             </div>
           </CollapsiblePanel>
@@ -2131,12 +2263,12 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
             {recentServiceHistory.length > 0 ? recentServiceHistory.map((record) => {
               const asset = scopedAssets.find((item) => item.id === record.assetId);
               return (
-                <div key={record.id} className="timeline-item">
+                <button key={record.id} className="timeline-item clickable-list-item" type="button" onClick={() => onOpenService?.(record.id)}>
                   <small>{record.serviceDate || "Not recorded"}</small>
                   <strong>{asset?.name || "Unknown asset"} - {record.serviceType}</strong>
                   <p>{record.description}</p>
                   <small>{formatStatusLabel(record.status)}</small>
-                </div>
+                </button>
               );
             }) : <div className="empty-inline">No service history yet.</div>}
           </div>
@@ -2144,18 +2276,18 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand }) {
         <CollapsiblePanel title="Priority appeal history" badge={<span className="badge open">{recentAppeals.length}</span>}>
           <div className="timeline">
             {recentAppeals.length > 0 ? recentAppeals.map((appeal) => (
-              <div key={appeal.id} className="timeline-item">
+              <button key={appeal.id} className="timeline-item clickable-list-item" type="button" onClick={() => onOpenAppeal?.(appeal.id)}>
                 <span className={statusClass(appeal.status)}>{formatStatusLabel(appeal.status)}</span>
                 <strong>{appeal.title}</strong>
                 <p>{appeal.description}</p>
-              </div>
+              </button>
             )) : <div className="empty-inline">No appeal history yet.</div>}
           </div>
         </CollapsiblePanel>
         <CollapsiblePanel title="Priority assets" badge={<span className="badge in-service">{attentionAssets.length}</span>}>
           <div className="asset-list compact">
             {attentionAssets.length > 0 ? attentionAssets.map((asset) => (
-              <AssetRow key={asset.id} asset={asset} client={data.clients.find((client) => client.id === asset.clientId)} />
+              <AssetRow key={asset.id} asset={asset} client={data.clients.find((client) => client.id === asset.clientId)} onSelect={() => onOpenAsset?.(asset.id)} />
             )) : <div className="empty-inline">All assets are currently active.</div>}
           </div>
         </CollapsiblePanel>
@@ -2205,6 +2337,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
     name: "",
     assetCode: "",
     clientId: lockedClientId || clients[0]?.id || "",
+    branchId: "",
     category: categories[0] || "",
     userName: "",
     location: "",
@@ -2225,10 +2358,14 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
   useEffect(() => {
     setForm((current) => {
       const nextClientId = lockedClientId || (clients.some((client) => client.id === current.clientId) ? current.clientId : (clients[0]?.id || ""));
+      const nextClient = clients.find((client) => client.id === nextClientId);
+      const branches = clientBranches(nextClient);
+      const nextBranchId = branches.some((branch) => branch.id === current.branchId) ? current.branchId : (branches[0]?.id || "");
       const nextCategory = categories.includes(current.category) ? current.category : (categories[0] || "");
       return {
         ...current,
         clientId: nextClientId,
+        branchId: nextBranchId,
         category: nextCategory,
         assetCode: generateAssetCode(clients, existingAssets, nextClientId, nextCategory)
       };
@@ -2242,6 +2379,9 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
         const nextClientId = field === "clientId" ? value : next.clientId;
         const nextCategory = field === "category" ? value : next.category;
         next.assetCode = generateAssetCode(clients, existingAssets, nextClientId, nextCategory);
+        if (field === "clientId") {
+          next.branchId = clientBranches(clients.find((client) => client.id === nextClientId))[0]?.id || "";
+        }
       }
       return next;
     });
@@ -2291,6 +2431,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
       name: "",
       assetCode: generateAssetCode(clients, existingAssets, defaultClientId, defaultCategory),
       clientId: defaultClientId,
+      branchId: clientBranches(clients.find((client) => client.id === defaultClientId))[0]?.id || "",
       category: defaultCategory,
       userName: "",
       location: "",
@@ -2310,9 +2451,10 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
   }
 
   function canContinue() {
-    if (step === 0) return Boolean(form.clientId);
-    if (step === 1) return Boolean(form.category && form.name.trim());
-    return true;
+    if (step === 0) return Boolean(form.clientId && form.branchId && form.location.trim() && form.userName.trim());
+    if (step === 1) return Boolean(form.category && form.name.trim() && form.brand.trim() && form.model.trim() && form.serialNumber.trim());
+    if (step === 2) return Boolean(form.status && form.purchaseDate && form.warrantyEndDate && form.notes.trim());
+    return Boolean(form.image && form.documents.length > 0);
   }
 
   function goToStep(index) {
@@ -2370,12 +2512,20 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
             </label>
           )}
           <label>
-            Location
-            <input placeholder="Office, department, site, or room" value={form.location} onChange={(event) => update("location", event.target.value)} />
+            Branch
+            <select value={form.branchId} onChange={(event) => update("branchId", event.target.value)} required>
+              {clientBranches(clients.find((client) => client.id === form.clientId)).map((branch) => (
+                <option key={branch.id} value={branch.id}>{branch.name}</option>
+              ))}
+            </select>
           </label>
           <label>
-            User name
-            <input placeholder="Assigned user name" value={form.userName} onChange={(event) => update("userName", event.target.value)} />
+            Location *
+            <input placeholder="Office, department, site, or room" value={form.location} onChange={(event) => update("location", event.target.value)} required />
+          </label>
+          <label>
+            User name *
+            <input placeholder="Assigned user name" value={form.userName} onChange={(event) => update("userName", event.target.value)} required />
           </label>
         </div>
       )}
@@ -2395,16 +2545,16 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
             <input placeholder="Dell Latitude 5440" value={form.name} onChange={(event) => update("name", event.target.value)} required />
           </label>
           <label>
-            Brand
-            <input placeholder="Dell, HP, Lenovo" value={form.brand} onChange={(event) => update("brand", event.target.value)} />
+            Brand *
+            <input placeholder="Dell, HP, Lenovo" value={form.brand} onChange={(event) => update("brand", event.target.value)} required />
           </label>
           <label>
-            Model
-            <input placeholder="Latitude 5440" value={form.model} onChange={(event) => update("model", event.target.value)} />
+            Model *
+            <input placeholder="Latitude 5440" value={form.model} onChange={(event) => update("model", event.target.value)} required />
           </label>
           <label>
-            Serial number
-            <input placeholder="Serial or service tag" value={form.serialNumber} onChange={(event) => update("serialNumber", event.target.value)} />
+            Serial number *
+            <input placeholder="Serial or service tag" value={form.serialNumber} onChange={(event) => update("serialNumber", event.target.value)} required />
           </label>
         </div>
       )}
@@ -2425,16 +2575,16 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
             </select>
           </label>
           <label>
-            Purchase date
-            <input type="date" value={form.purchaseDate} onChange={(event) => update("purchaseDate", event.target.value)} />
+            Purchase date *
+            <input type="date" value={form.purchaseDate} onChange={(event) => update("purchaseDate", event.target.value)} required />
           </label>
           <label>
-            Warranty end date
-            <input type="date" value={form.warrantyEndDate} onChange={(event) => update("warrantyEndDate", event.target.value)} />
+            Warranty end date *
+            <input type="date" value={form.warrantyEndDate} onChange={(event) => update("warrantyEndDate", event.target.value)} required />
           </label>
           <label>
-            Notes
-            <textarea placeholder="Additional technical details..." value={form.notes} onChange={(event) => update("notes", event.target.value)} />
+            Notes *
+            <textarea placeholder="Additional technical details..." value={form.notes} onChange={(event) => update("notes", event.target.value)} required />
           </label>
         </div>
       )}
@@ -2497,7 +2647,13 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete, canDelete
   const [uploadError, setUploadError] = useState("");
 
   function update(field, value) {
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => {
+      const next = { ...current, [field]: value };
+      if (field === "clientId") {
+        next.branchId = clientBranches(clients.find((client) => client.id === value))[0]?.id || "";
+      }
+      return next;
+    });
   }
 
   async function uploadImage(event) {
@@ -2555,6 +2711,11 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete, canDelete
           {clients.map((client) => <option key={client.id} value={client.id}>{client.companyName}</option>)}
         </select>
       )}
+      <select value={form.branchId || clientBranches(clients.find((client) => client.id === form.clientId))[0]?.id || ""} onChange={(event) => update("branchId", event.target.value)} required>
+        {clientBranches(clients.find((client) => client.id === form.clientId)).map((branch) => (
+          <option key={branch.id} value={branch.id}>{branch.name}</option>
+        ))}
+      </select>
       <select value={form.category} onChange={(event) => update("category", event.target.value)}>
         {categories.map((category) => <option key={category} value={category}>{category}</option>)}
       </select>
@@ -2703,7 +2864,7 @@ function LifecycleManager({ asset, onAddLifecycle }) {
   );
 }
 
-function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }) {
+function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, initialSelectedId }) {
   const [query, setQuery] = useState("");
   const [filterClientId, setFilterClientId] = useState(user.role === "admin" ? (data.clients[0]?.id || "") : user.clientId);
   const [filterCategory, setFilterCategory] = useState("");
@@ -2744,13 +2905,21 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
     }
   }, [filtered, selectedId]);
 
+  useEffect(() => {
+    if (initialSelectedId && scopedAssets.some((asset) => asset.id === initialSelectedId)) {
+      setSelectedId(initialSelectedId);
+      setAssetView("details");
+    }
+  }, [initialSelectedId, scopedAssets]);
+
   function createAsset(form) {
     const assetCode = generateAssetCode(data.clients, data.assets, form.clientId, form.category);
-    const asset = {
-      id: uid("a"),
-      assetCode,
-      clientId: form.clientId,
-      name: form.name,
+      const asset = {
+        id: uid("a"),
+        assetCode,
+        clientId: form.clientId,
+        branchId: form.branchId,
+        name: form.name,
       userName: form.userName,
       category: form.category,
       brand: form.brand,
@@ -3112,6 +3281,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer }
                     </div>
                     <dl className="asset-facts">
                       <div><dt>Client</dt><dd>{data.clients.find((client) => client.id === selected.clientId)?.companyName || "Not assigned"}</dd></div>
+                      <div><dt>Branch</dt><dd>{branchName(data.clients.find((client) => client.id === selected.clientId), selected.branchId)}</dd></div>
                       <div><dt>Brand / model</dt><dd>{selected.brand || "Not recorded"} / {selected.model || "Not recorded"}</dd></div>
                       <div><dt>Location</dt><dd>{selected.location || "Not recorded"}</dd></div>
                       <div><dt>Warranty ends</dt><dd>{selected.warrantyEndDate || "Not recorded"}</dd></div>
@@ -3208,8 +3378,8 @@ function HistoryPanel({ title, items }) {
   );
 }
 
-function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify }) {
-  const [selectedId, setSelectedId] = useState(scopedAppeals[0]?.id);
+function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify, initialSelectedId }) {
+  const [selectedId, setSelectedId] = useState(initialSelectedId || scopedAppeals[0]?.id);
   const [newIssue, setNewIssue] = useState({ assetId: scopedAssets[0]?.id || "", title: "", description: "", priority: "medium" });
   const [newIssueFile, setNewIssueFile] = useState(null);
   const [uploadingAppeal, setUploadingAppeal] = useState(false);
@@ -3232,6 +3402,12 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
       setSelectedId(scopedAppeals[0].id);
     }
   }, [scopedAppeals, selectedId]);
+
+  useEffect(() => {
+    if (initialSelectedId && scopedAppeals.some((appeal) => appeal.id === initialSelectedId)) {
+      setSelectedId(initialSelectedId);
+    }
+  }, [initialSelectedId, scopedAppeals]);
 
   function getAsset(assetId) {
     return data.assets.find((asset) => asset.id === assetId);
@@ -3544,7 +3720,7 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify 
   );
 }
 
-function ServicePage({ user, data, setData, notify }) {
+function ServicePage({ user, data, setData, notify, initialSelectedId }) {
   const availableEngineers = (data.engineers || []).filter((engineer) => engineer.status !== "inactive");
   const [selectedRecordId, setSelectedRecordId] = useState(data.serviceRecords[0]?.id || "");
   const selectedRecord = data.serviceRecords.find((record) => record.id === selectedRecordId);
@@ -3569,6 +3745,12 @@ function ServicePage({ user, data, setData, notify }) {
   useEffect(() => {
     setStatusDraft(selectedRecord?.status || "repairing");
   }, [selectedRecord?.id, selectedRecord?.status]);
+
+  useEffect(() => {
+    if (initialSelectedId && data.serviceRecords.some((record) => record.id === initialSelectedId)) {
+      setSelectedRecordId(initialSelectedId);
+    }
+  }, [initialSelectedId, data.serviceRecords]);
 
   function updateForm(field, value) {
     setForm((current) => {
@@ -4112,6 +4294,7 @@ export default function App() {
   const [notice, setNotice] = useState(null);
   const [showEngineerModal, setShowEngineerModal] = useState(false);
   const [theme, setTheme] = useState(loadStoredTheme);
+  const [routeSelection, setRouteSelection] = useState({ assetId: "", appealId: "", serviceId: "" });
   const seenNotificationIds = useRef({ initialized: false, ids: new Set() });
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [appInstalled, setAppInstalled] = useState(() => window.matchMedia("(display-mode: standalone)").matches || Boolean(window.navigator?.standalone));
@@ -4751,6 +4934,22 @@ export default function App() {
       .sort((first, second) => new Date(second.createdAt) - new Date(first.createdAt));
   }, [data.notifications, user]);
   const notificationUnreadCount = useMemo(() => unreadNotificationCount(data.notifications || [], user), [data.notifications, user]);
+  const badgeCounts = useMemo(() => sidebarBadgeCounts({ user, data, scopedAssets, scopedAppeals }), [user, data, scopedAssets, scopedAppeals]);
+
+  function openAssetFromDashboard(assetId) {
+    setRouteSelection((current) => ({ ...current, assetId }));
+    setView("assets");
+  }
+
+  function openAppealFromDashboard(appealId) {
+    setRouteSelection((current) => ({ ...current, appealId }));
+    setView("appeals");
+  }
+
+  function openServiceFromDashboard(serviceId) {
+    setRouteSelection((current) => ({ ...current, serviceId }));
+    setView("service");
+  }
 
   if (!user) return <LoginScreen onLogin={login} />;
   if (user.role === "client" && clientBrand?.status === "inactive") {
@@ -4766,6 +4965,7 @@ export default function App() {
         headerAction={null}
         notifications={visibleNotifications}
         unreadCount={notificationUnreadCount}
+        badgeCounts={badgeCounts}
         onMarkNotificationsRead={markNotificationsRead}
         onClearNotifications={clearNotifications}
         showInstallButton={!appInstalled}
@@ -4792,6 +4992,7 @@ export default function App() {
       onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
       notifications={visibleNotifications}
       unreadCount={notificationUnreadCount}
+      badgeCounts={badgeCounts}
       onMarkNotificationsRead={markNotificationsRead}
       onClearNotifications={clearNotifications}
       showInstallButton={!appInstalled}
@@ -4809,11 +5010,11 @@ export default function App() {
           {pendingSync && <button type="button" onClick={syncPendingState}>Retry sync</button>}
         </div>
       )}
-      {view === "dashboard" && <Dashboard user={user} data={data} scopedAssets={scopedAssets} scopedAppeals={scopedAppeals} clientBrand={clientBrand} setData={setData} />}
+      {view === "dashboard" && <Dashboard user={user} data={data} scopedAssets={scopedAssets} scopedAppeals={scopedAppeals} clientBrand={clientBrand} setData={setData} onOpenAsset={openAssetFromDashboard} onOpenAppeal={openAppealFromDashboard} onOpenService={openServiceFromDashboard} />}
       {view === "companies" && user.role === "admin" && <CompaniesPage user={user} data={data} setData={setData} setDataState={setDataState} notify={notify} />}
-      {view === "assets" && <AssetsPage user={user} data={data} scopedAssets={scopedAssets} setData={setData} notify={notify} onAddEngineer={() => setShowEngineerModal(true)} />}
-      {view === "appeals" && <AppealsPage user={user} data={data} scopedAppeals={scopedAppeals} scopedAssets={scopedAssets} setData={setData} notify={notify} />}
-      {view === "service" && user.role === "admin" && <ServicePage user={user} data={data} setData={setData} notify={notify} />}
+      {view === "assets" && <AssetsPage user={user} data={data} scopedAssets={scopedAssets} setData={setData} notify={notify} onAddEngineer={() => setShowEngineerModal(true)} initialSelectedId={routeSelection.assetId} />}
+      {view === "appeals" && <AppealsPage user={user} data={data} scopedAppeals={scopedAppeals} scopedAssets={scopedAssets} setData={setData} notify={notify} initialSelectedId={routeSelection.appealId} />}
+      {view === "service" && user.role === "admin" && <ServicePage user={user} data={data} setData={setData} notify={notify} initialSelectedId={routeSelection.serviceId} />}
       {view === "service" && user.role === "client" && <ClientServiceHistoryPage scopedAssets={scopedAssets} data={data} />}
       {view === "settings" && user.role === "admin" && <AdminSettingsPage data={data} notify={notify} onUpdateClientCredentials={updateClientCredentials} onResolveCredentialRequest={resolveCredentialRequest} onChangeAdminPassword={changeAdminPassword} onUpdateAdminAlertEmail={updateAdminAlertEmail} onSendAdminAlertTest={sendAdminAlertTest} />}
       {view === "settings" && user.role === "client" && <ClientSettingsPage user={user} data={data} notify={notify} onSubmitCredentialRequest={submitCredentialRequest} />}

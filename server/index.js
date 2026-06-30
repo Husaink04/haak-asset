@@ -438,6 +438,19 @@ function notificationRecipients(notification, state) {
   return [...new Map(recipients.map((user) => [user.email.toLowerCase(), user])).values()];
 }
 
+const emailNotificationTypes = new Set([
+  "appeal_created",
+  "appeal_updated",
+  "credentials_updated",
+  "credential_request",
+  "credential_request_resolved",
+  "admin_password_changed"
+]);
+
+function shouldEmailNotification(notification) {
+  return emailNotificationTypes.has(notification?.type);
+}
+
 function getAppUrl() {
   if (process.env.PUBLIC_APP_URL) return process.env.PUBLIC_APP_URL;
   if (process.env.CORS_ORIGIN) {
@@ -707,14 +720,15 @@ async function sendClientCredentialsUpdatedEmail(client, user, newEmail, newPass
 }
 
 async function emailNewNotifications(newNotifications, state) {
-  if (!isEmailEnabled() || newNotifications.length === 0) {
-    if (!isEmailEnabled() && newNotifications.length > 0) console.warn("Notification email skipped because SMTP/Resend is not configured.");
+  const emailableNotifications = (newNotifications || []).filter(shouldEmailNotification);
+  if (!isEmailEnabled() || emailableNotifications.length === 0) {
+    if (!isEmailEnabled() && emailableNotifications.length > 0) console.warn("Notification email skipped because SMTP/Resend is not configured.");
     return { sent: 0, failed: 0, skipped: true };
   }
 
   const appUrl = getAppUrl();
   const tasks = [];
-  for (const notification of newNotifications) {
+  for (const notification of emailableNotifications) {
     const recipients = notificationRecipients(notification, state);
     for (const recipient of recipients) {
       tasks.push(
@@ -896,6 +910,16 @@ function mergeClientState(nextState, currentState, auth) {
   const addedNotifications = (nextState.notifications || [])
     .filter((notification) => !currentNotificationIds.has(notification.id) && notification.clientId === ownClientId)
     .map((notification) => ({ ...notification, clientId: ownClientId }));
+  const submittedNotifications = new Map((nextState.notifications || []).map((notification) => [notification.id, notification]));
+  const mergedNotifications = (currentState.notifications || [])
+    .filter((notification) => notification.clientId !== ownClientId || submittedNotifications.has(notification.id))
+    .map((notification) => {
+      if (notification.clientId !== ownClientId) return notification;
+      const submitted = submittedNotifications.get(notification.id);
+      return submitted
+        ? { ...notification, readBy: submitted.readBy || notification.readBy || [] }
+        : notification;
+    });
 
   return {
     ...currentState,
@@ -903,7 +927,7 @@ function mergeClientState(nextState, currentState, auth) {
     credentialRequests: nextState.credentialRequests || currentState.credentialRequests,
     appeals: nextState.appeals || currentState.appeals,
     appealMessages: nextState.appealMessages || currentState.appealMessages,
-    notifications: [...addedNotifications, ...(currentState.notifications || [])]
+    notifications: [...addedNotifications, ...mergedNotifications]
   };
 }
 
