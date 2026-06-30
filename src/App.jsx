@@ -1354,7 +1354,7 @@ function CompanyForm({ onCreate, className = "" }) {
       {step === 1 && (
         <div className="wizard-step company-wizard-step">
           <h3>Company branches</h3>
-          <p>Add every branch where this company can hold assets.</p>
+          <p>Add branches and their departments (e.g. HR, Sales, IT).</p>
           <div className="branch-editor-list">
             {form.branches.map((branch, index) => (
               <div className="branch-editor-row" key={branch.id}>
@@ -1365,6 +1365,10 @@ function CompanyForm({ onCreate, className = "" }) {
                 <label>
                   Branch address
                   <input placeholder="Branch address or area" value={branch.address} onChange={(event) => updateBranch(index, "address", event.target.value)} />
+                </label>
+                <label>
+                  Departments (comma-separated)
+                  <input placeholder="HR, Sales, IT" value={branch.departmentsText || ""} onChange={(event) => updateBranch(index, "departmentsText", event.target.value)} />
                 </label>
                 <button className="secondary" type="button" onClick={() => removeBranch(index)} disabled={form.branches.length === 1}>Remove</button>
               </div>
@@ -1744,6 +1748,10 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
                 <label>
                   Branch address
                   <input placeholder="Branch address or area" value={branch.address} onChange={(event) => updateBranch(index, "address", event.target.value)} />
+                </label>
+                <label>
+                  Departments (comma-separated)
+                  <input placeholder="HR, Sales, IT" value={branch.departmentsText || ""} onChange={(event) => updateBranch(index, "departmentsText", event.target.value)} />
                 </label>
                 <button className="secondary" type="button" onClick={() => removeBranch(index)} disabled={normalizeBranches(form.branches).length === 1}>Remove</button>
               </div>
