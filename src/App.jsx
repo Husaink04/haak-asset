@@ -2476,9 +2476,37 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
   }
 
   function canContinue() {
-    if (step === 0) return Boolean(form.clientId && form.branchId && form.location.trim() && form.userName.trim());
-    if (step === 1) return Boolean(form.category && form.name.trim());
-    return true;
+    if (step === 0) {
+      const client = clients.find((c) => c.id === form.clientId);
+      const branches = clientBranches(client);
+      const selectedBranchObj = branches.find((b) => b.id === form.branchId);
+      const hasDepts = selectedBranchObj?.departments?.length > 0;
+      return Boolean(
+        form.clientId &&
+        form.branchId &&
+        (!hasDepts || form.department) &&
+        form.location.trim() &&
+        form.userName.trim()
+      );
+    }
+    if (step === 1) {
+      return Boolean(
+        form.category &&
+        form.name.trim() &&
+        form.brand.trim() &&
+        form.model.trim() &&
+        form.serialNumber.trim()
+      );
+    }
+    if (step === 2) {
+      return Boolean(
+        form.status &&
+        form.purchaseDate &&
+        form.warrantyEndDate &&
+        form.notes.trim()
+      );
+    }
+    return Boolean(form.image && form.documents.length > 0);
   }
 
   function goToStep(index) {
@@ -2638,7 +2666,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
             <AssetVisual asset={{ images: form.image ? [form.image] : [], name: form.name }} className="asset-editor-preview" />
             <div className="asset-editor-media-controls">
               <label className="file-field">
-                Upload image
+                Upload image *
                 <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif" onChange={uploadAssetImage} disabled={uploadingImage} />
                 <span><Camera size={15} /> {form.image ? "Upload replacement image" : `Upload first image (JPG/PNG/WEBP, max ${MAX_UPLOAD_MB} MB)`}</span>
               </label>
@@ -2659,7 +2687,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
           </div>
 
           <label className="file-field">
-            Upload document
+            Upload document *
             <input type="file" accept=".pdf,.doc,.docx" onChange={uploadAssetDocument} disabled={uploadingDocument} />
             <span><Paperclip size={15} /> Upload document (.doc/.docx/.pdf, max {MAX_UPLOAD_MB} MB)</span>
           </label>
