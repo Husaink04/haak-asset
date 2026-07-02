@@ -42,9 +42,9 @@ APP_PORT=4000
 POSTGRES_PASSWORD=use-a-strong-postgres-password
 JWT_SECRET=use-a-long-random-secret
 VITE_API_URL=/api
-PUBLIC_API_URL=http://YOUR_SERVER_IP:4000
-PUBLIC_APP_URL=http://YOUR_SERVER_IP:4000
-CORS_ORIGIN=http://YOUR_SERVER_IP:4000
+PUBLIC_API_URL=https://haakasset.duckdns.org
+PUBLIC_APP_URL=https://haakasset.duckdns.org
+CORS_ORIGIN=https://haakasset.duckdns.org
 ```
 
 For email notifications, also set SMTP values:
@@ -75,7 +75,7 @@ docker compose logs -f app
 Open:
 
 ```text
-http://YOUR_SERVER_IP:4000
+https://haakasset.duckdns.org
 ```
 
 ## 5. Update after pushing new code

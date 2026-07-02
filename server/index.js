@@ -183,6 +183,12 @@ function smtpErrorDetail(error) {
 
 let mailTransporter = null;
 
+function emailLogoAttachments() {
+  return fs.existsSync(emailLogoPath)
+    ? [{ filename: "haak-infotech.png", path: emailLogoPath, cid: emailLogoCid }]
+    : [];
+}
+
 function getMailTransporter() {
   if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
   if (!mailTransporter) {
@@ -208,14 +214,20 @@ async function sendMailUnified(options) {
     const recipients = Array.isArray(options.to) ? options.to : [options.to];
 
     const brevoAttachments = [];
+    const brevoInlineImages = [];
     if (options.attachments && Array.isArray(options.attachments)) {
       for (const att of options.attachments) {
         if (att.path && fs.existsSync(att.path)) {
           const content = fs.readFileSync(att.path).toString("base64");
-          brevoAttachments.push({
+          const brevoAttachment = {
             content,
             name: att.filename
-          });
+          };
+          if (att.cid) {
+            brevoInlineImages.push({ ...brevoAttachment, cid: att.cid });
+          } else {
+            brevoAttachments.push(brevoAttachment);
+          }
         }
       }
     }
@@ -229,6 +241,9 @@ async function sendMailUnified(options) {
     };
     if (brevoAttachments.length > 0) {
       payload.attachment = brevoAttachments;
+    }
+    if (brevoInlineImages.length > 0) {
+      payload.inlineImage = brevoInlineImages;
     }
 
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -649,9 +664,7 @@ async function sendClientWelcomeEmail(client, user, plainPassword) {
         subject,
         text,
         html,
-        attachments: fs.existsSync(emailLogoPath)
-          ? [{ filename: "haak-infotech.png", path: emailLogoPath, cid: emailLogoCid }]
-          : []
+        attachments: emailLogoAttachments()
       })
     );
   }
@@ -704,9 +717,7 @@ async function sendClientCredentialsUpdatedEmail(client, user, newEmail, newPass
         subject,
         text,
         html,
-        attachments: fs.existsSync(emailLogoPath)
-          ? [{ filename: "haak-infotech.png", path: emailLogoPath, cid: emailLogoCid }]
-          : []
+        attachments: emailLogoAttachments()
       })
     );
   }
@@ -744,9 +755,7 @@ async function emailNewNotifications(newNotifications, state) {
             appUrl ? `Open: ${appUrl}` : ""
           ].filter(Boolean).join("\n"),
           html: buildNotificationEmail(notification, appUrl),
-          attachments: fs.existsSync(emailLogoPath)
-            ? [{ filename: "haak-infotech.png", path: emailLogoPath, cid: emailLogoCid }]
-            : []
+          attachments: emailLogoAttachments()
         })
       );
     }
@@ -784,9 +793,7 @@ async function sendAdminAlertTestEmail(email) {
       appUrl ? `Open: ${appUrl}` : ""
     ].filter(Boolean).join("\n"),
     html: buildNotificationEmail(notification, appUrl),
-    attachments: fs.existsSync(emailLogoPath)
-      ? [{ filename: "haak-infotech.png", path: emailLogoPath, cid: emailLogoCid }]
-      : []
+    attachments: emailLogoAttachments()
   });
   return result;
 }
