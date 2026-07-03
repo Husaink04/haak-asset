@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Moon,
   Paperclip,
+  Download,
   Plus,
   RefreshCw,
   Save,
@@ -30,7 +31,6 @@ import {
   UserRound,
   Wifi,
   WifiOff,
-  Download,
 } from "lucide-react";
 import React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -443,7 +443,7 @@ function normalizeBranches(branches, fallbackName = "Main Branch") {
       address: String(branch?.address || "").trim()
     }))
     .filter((branch) => branch.name);
-  return normalized.length > 0 ? normalized : [{ id: uid("br"), name: fallbackName, address: "" }];
+  return normalized.length > 0 ? normalized : [{ id: "branch-default", name: fallbackName, address: "" }];
 }
 
 function clientBranches(client) {
@@ -2955,6 +2955,599 @@ function LifecycleManager({ asset, onAddLifecycle }) {
   );
 }
 
+function BulkAssetCreatorModal({ user, clients, onImport, onClose, existingAssets }) {
+  const [activeTab, setActiveTab] = useState("spreadsheet"); // "spreadsheet" or "csv"
+  const [dragActive, setDragActive] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const createEmptyRow = () => ({
+    id: `row-${Date.now()}-${Math.random()}`,
+    name: "",
+    category: "",
+    clientId: user.role === "client" ? user.clientId : "",
+    branchId: "",
+    serialNumber: "",
+    brand: "",
+    model: "",
+    purchaseDate: "",
+    warrantyEndDate: "",
+    location: "",
+    department: "",
+    status: "active",
+    notes: ""
+  });
+
+  const [rows, setRows] = useState([createEmptyRow()]);
+
+  const updateRow = (index, field, value) => {
+    setRows(current => current.map((row, idx) => {
+      if (idx !== index) return row;
+      const nextRow = { ...row, [field]: value };
+      if (field === "clientId") {
+        nextRow.branchId = "";
+      }
+      return nextRow;
+    }));
+  };
+
+  const addRow = () => {
+    setRows(current => [...current, createEmptyRow()]);
+  };
+
+  const removeRow = (index) => {
+    setRows(current => {
+      const next = current.filter((_, idx) => idx !== index);
+      return next.length > 0 ? next : [createEmptyRow()];
+    });
+  };
+
+  const validateRows = () => {
+    return rows.map(row => {
+      const errors = [];
+      if (!row.name.trim()) errors.push("Name is required");
+      if (!row.category.trim()) errors.push("Category is required");
+      if (user.role === "admin" && !row.clientId) errors.push("Company is required");
+
+      if (row.serialNumber.trim()) {
+        const serial = row.serialNumber.trim().toLowerCase();
+        const dupInGrid = rows.filter(r => r.serialNumber.trim().toLowerCase() === serial).length > 1;
+        const dupInDb = existingAssets.some(a => a.serialNumber && a.serialNumber.toLowerCase() === serial);
+        if (dupInGrid) errors.push("Duplicate serial in grid");
+        if (dupInDb) errors.push("Serial already exists in database");
+      }
+
+      return {
+        ...row,
+        errors,
+        isValid: errors.length === 0
+      };
+    });
+  };
+
+  const validatedRows = validateRows();
+  const hasErrors = validatedRows.some(r => !r.isValid);
+  const totalRows = rows.length;
+
+  const handleConfirmSave = () => {
+    if (hasErrors) {
+      toast.error("Please fix all errors before saving.");
+      return;
+    }
+
+    let tempAssets = [...existingAssets];
+    const finalAssets = validatedRows.map(row => {
+      const assetCode = generateAssetCode(clients, tempAssets, row.clientId, row.category);
+      const newAsset = {
+        id: uid("a"),
+        assetCode,
+        clientId: row.clientId,
+        branchId: row.branchId || null,
+        name: row.name.trim(),
+        category: row.category.trim(),
+        brand: row.brand.trim(),
+        model: row.model.trim(),
+        serialNumber: row.serialNumber.trim(),
+        purchaseDate: row.purchaseDate || "",
+        warrantyEndDate: row.warrantyEndDate || "",
+        location: row.location.trim(),
+        department: row.department.trim(),
+        status: row.status,
+        notes: row.notes.trim(),
+        images: [],
+        documents: [],
+        lifecycle: [
+          { id: uid("l"), type: "Created", description: `Asset created in bulk via inline bulk creator by ${user.role}.`, createdAt: today() }
+        ]
+      };
+      tempAssets.push(newAsset);
+      return newAsset;
+    });
+
+    onImport(finalAssets);
+  };
+
+  // CSV Parser
+  function parseCSV(text) {
+    const lines = [];
+    let row = [""];
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          row[row.length - 1] += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        row.push("");
+      } else if ((char === '\r' || char === '\n') && !inQuotes) {
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
+        lines.push(row);
+        row = [""];
+      } else {
+        row[row.length - 1] += char;
+      }
+    }
+    if (row.length > 1 || row[0] !== "") {
+      lines.push(row);
+    }
+    return lines;
+  }
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFile(e.target.files[0]);
+    }
+  };
+
+  const handleFile = (selectedFile) => {
+    if (!selectedFile.name.endsWith(".csv")) {
+      setErrorMsg("Please upload a valid CSV file.");
+      return;
+    }
+    setErrorMsg("");
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target.result;
+        const rawLines = parseCSV(text);
+        if (rawLines.length < 2) {
+          setErrorMsg("CSV is empty or missing headers.");
+          return;
+        }
+
+        const headers = rawLines[0].map(h => h.trim().toLowerCase());
+        const rawRows = rawLines.slice(1);
+
+        const nameIdx = headers.findIndex(h => h.includes("name"));
+        const categoryIdx = headers.findIndex(h => h.includes("category"));
+        const companyIdx = headers.findIndex(h => h.includes("company") || h.includes("client"));
+        const serialIdx = headers.findIndex(h => h.includes("serial"));
+        const brandIdx = headers.findIndex(h => h.includes("brand"));
+        const modelIdx = headers.findIndex(h => h.includes("model"));
+        const purchaseIdx = headers.findIndex(h => h.includes("purchase"));
+        const warrantyIdx = headers.findIndex(h => h.includes("warranty"));
+        const locationIdx = headers.findIndex(h => h.includes("location"));
+        const deptIdx = headers.findIndex(h => h.includes("department"));
+        const branchIdx = headers.findIndex(h => h.includes("branch"));
+        const statusIdx = headers.findIndex(h => h.includes("status"));
+        const notesIdx = headers.findIndex(h => h.includes("note"));
+
+        if (nameIdx === -1) {
+          setErrorMsg("Missing required column: 'Name'.");
+          return;
+        }
+        if (categoryIdx === -1) {
+          setErrorMsg("Missing required column: 'Category'.");
+          return;
+        }
+
+        const parsed = rawRows.map((row, idx) => {
+          if (row.length <= 1 && (!row[0] || row[0].trim() === "")) return null; // skip blank lines
+          
+          const name = row[nameIdx] ? row[nameIdx].trim() : "";
+          const category = row[categoryIdx] ? row[categoryIdx].trim() : "";
+          const serialNumber = serialIdx !== -1 && row[serialIdx] ? row[serialIdx].trim() : "";
+          const brand = brandIdx !== -1 && row[brandIdx] ? row[brandIdx].trim() : "";
+          const model = modelIdx !== -1 && row[modelIdx] ? row[modelIdx].trim() : "";
+          const purchaseDate = purchaseIdx !== -1 && row[purchaseIdx] ? row[purchaseIdx].trim() : "";
+          const warrantyEndDate = warrantyIdx !== -1 && row[warrantyIdx] ? row[warrantyIdx].trim() : "";
+          const location = locationIdx !== -1 && row[locationIdx] ? row[locationIdx].trim() : "";
+          const department = deptIdx !== -1 && row[deptIdx] ? row[deptIdx].trim() : "";
+          const branchNameText = branchIdx !== -1 && row[branchIdx] ? row[branchIdx].trim() : "";
+          const statusVal = statusIdx !== -1 && row[statusIdx] ? row[statusIdx].trim().toLowerCase() : "active";
+          const notes = notesIdx !== -1 && row[notesIdx] ? row[notesIdx].trim() : "";
+
+          let clientId = "";
+          if (user.role === "client") {
+            clientId = user.clientId;
+          } else if (companyIdx !== -1 && row[companyIdx]) {
+            const matchedClient = clients.find(
+              c => c.companyName.toLowerCase() === row[companyIdx].trim().toLowerCase()
+            );
+            if (matchedClient) {
+              clientId = matchedClient.id;
+            }
+          }
+
+          let branchId = "";
+          const targetClient = clients.find(c => c.id === clientId);
+          if (targetClient && branchNameText) {
+            const matchedBranch = clientBranches(targetClient).find(
+              b => b.name.toLowerCase() === branchNameText.toLowerCase()
+            );
+            if (matchedBranch) {
+              branchId = matchedBranch.id;
+            }
+          }
+
+          return {
+            id: `row-csv-${idx}-${Date.now()}-${Math.random()}`,
+            name,
+            category,
+            clientId,
+            branchId,
+            serialNumber,
+            brand,
+            model,
+            purchaseDate,
+            warrantyEndDate,
+            location,
+            department,
+            status: ["active", "in_service", "repairing", "repaired", "retired", "damaged"].includes(statusVal) ? statusVal : "active",
+            notes
+          };
+        }).filter(Boolean);
+
+        if (parsed.length === 0) {
+          setErrorMsg("No assets found in CSV.");
+          return;
+        }
+
+        setRows(parsed);
+        setActiveTab("spreadsheet");
+        toast.success(`Successfully loaded ${parsed.length} rows from CSV! Review them below.`);
+      } catch (err) {
+        console.error(err);
+        setErrorMsg("Error parsing CSV. Please check formatting.");
+      }
+    };
+    reader.readAsText(selectedFile);
+  };
+
+  const downloadTemplate = (e) => {
+    e.stopPropagation();
+    const cols = user.role === "admin" 
+      ? ["Name*", "Category*", "Company*", "Brand", "Model", "Serial Number", "Purchase Date (YYYY-MM-DD)", "Warranty End (YYYY-MM-DD)", "Location", "Branch", "Department", "Status", "Notes"]
+      : ["Name*", "Category*", "Brand", "Model", "Serial Number", "Purchase Date (YYYY-MM-DD)", "Warranty End (YYYY-MM-DD)", "Location", "Branch", "Department", "Status", "Notes"];
+    
+    const sampleRow = user.role === "admin"
+      ? ["Dell Latitude 5440", "Laptop", "Apex Manufacturing Pvt Ltd", "Dell", "Latitude 5440", "SN-DELL-1002", "2025-09-12", "2028-09-11", "Finance Office", "Main Branch", "Finance", "active", "charger included"]
+      : ["Dell Latitude 5440", "Laptop", "Dell", "Latitude 5440", "SN-DELL-1002", "2025-09-12", "2028-09-11", "Finance Office", "Main Branch", "Finance", "active", "charger included"];
+
+    const formatCSVRow = (arr) => arr.map(item => `"${item.replace(/"/g, '""')}"`).join(",");
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+      + [formatCSVRow(cols), formatCSVRow(sampleRow)].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `assets_import_template_${user.role}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div className="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="bulk-modal-title" onClick={(event) => event.stopPropagation()} style={{ maxWidth: "95%", width: "1250px" }}>
+        <div className="panel-head">
+          <div>
+            <span className="eyebrow">Asset Management</span>
+            <h2 id="bulk-modal-title">Bulk Add Assets</h2>
+          </div>
+          <button className="secondary modal-close" type="button" onClick={onClose}>Close</button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          {/* Tab Headers */}
+          <div className="bulk-tab-header">
+            <button 
+              type="button" 
+              className={`bulk-tab-btn ${activeTab === "spreadsheet" ? "active" : ""}`}
+              onClick={() => setActiveTab("spreadsheet")}
+            >
+              Spreadsheet Editor
+            </button>
+            <button 
+              type="button" 
+              className={`bulk-tab-btn ${activeTab === "csv" ? "active" : ""}`}
+              onClick={() => setActiveTab("csv")}
+            >
+              Upload CSV File
+            </button>
+          </div>
+
+          {activeTab === "spreadsheet" ? (
+            <>
+              <div className="bulk-table-container">
+                <table className="bulk-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "50px", textAlignment: "center" }}>Status</th>
+                      <th style={{ width: "180px" }}>Asset Name *</th>
+                      <th style={{ width: "130px" }}>Category *</th>
+                      {user.role === "admin" && <th style={{ width: "180px" }}>Target Company *</th>}
+                      <th style={{ width: "140px" }}>Branch</th>
+                      <th style={{ width: "110px" }}>Brand</th>
+                      <th style={{ width: "110px" }}>Model</th>
+                      <th style={{ width: "140px" }}>Serial Number</th>
+                      <th style={{ width: "120px" }}>Location</th>
+                      <th style={{ width: "120px" }}>Department</th>
+                      <th style={{ width: "140px" }}>Purchase Date</th>
+                      <th style={{ width: "140px" }}>Warranty End</th>
+                      <th style={{ width: "180px" }}>Notes</th>
+                      <th style={{ width: "50px", textAlign: "center" }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {validatedRows.map((row, idx) => {
+                      const targetClient = clients.find(c => c.id === row.clientId);
+                      const branches = clientBranches(targetClient);
+
+                      return (
+                        <tr key={row.id}>
+                          <td style={{ textAlign: "center" }}>
+                            {row.isValid ? (
+                              <CheckCircle2 size={18} style={{ color: "#16a34a" }} />
+                            ) : (
+                              <div className="bulk-warning-tooltip" data-tooltip={row.errors.join(", ")}>
+                                <AlertCircle size={18} style={{ color: "#dc2626" }} />
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className={`bulk-input ${!row.name.trim() ? "error" : ""}`}
+                              placeholder="e.g. Dell Latitude 5440"
+                              value={row.name}
+                              onChange={(e) => updateRow(idx, "name", e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className={`bulk-input ${!row.category.trim() ? "error" : ""}`}
+                              placeholder="e.g. Laptop"
+                              value={row.category}
+                              onChange={(e) => updateRow(idx, "category", e.target.value)}
+                            />
+                          </td>
+                          {user.role === "admin" && (
+                            <td>
+                              <select
+                                className={`bulk-select ${!row.clientId ? "error" : ""}`}
+                                value={row.clientId}
+                                onChange={(e) => updateRow(idx, "clientId", e.target.value)}
+                              >
+                                <option value="">-- Select Client --</option>
+                                {clients.map(c => (
+                                  <option key={c.id} value={c.id}>{c.companyName}</option>
+                                ))}
+                              </select>
+                            </td>
+                          )}
+                          <td>
+                            <select
+                              className="bulk-select"
+                              value={row.branchId}
+                              onChange={(e) => updateRow(idx, "branchId", e.target.value)}
+                              disabled={!row.clientId}
+                            >
+                              <option value="">-- Select Branch --</option>
+                              {branches.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className="bulk-input"
+                              placeholder="Dell"
+                              value={row.brand}
+                              onChange={(e) => updateRow(idx, "brand", e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className="bulk-input"
+                              placeholder="L5440"
+                              value={row.model}
+                              onChange={(e) => updateRow(idx, "model", e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className="bulk-input"
+                              placeholder="SN-12345"
+                              value={row.serialNumber}
+                              onChange={(e) => updateRow(idx, "serialNumber", e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className="bulk-input"
+                              placeholder="Room 204"
+                              value={row.location}
+                              onChange={(e) => updateRow(idx, "location", e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className="bulk-input"
+                              placeholder="Finance"
+                              value={row.department}
+                              onChange={(e) => updateRow(idx, "department", e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="date"
+                              className="bulk-input"
+                              value={row.purchaseDate}
+                              onChange={(e) => updateRow(idx, "purchaseDate", e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="date"
+                              className="bulk-input"
+                              value={row.warrantyEndDate}
+                              onChange={(e) => updateRow(idx, "warrantyEndDate", e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className="bulk-input"
+                              placeholder="charger included"
+                              value={row.notes}
+                              onChange={(e) => updateRow(idx, "notes", e.target.value)}
+                            />
+                          </td>
+                          <td style={{ textAlign: "center" }}>
+                            <button
+                              type="button"
+                              className="bulk-action-btn delete"
+                              onClick={() => removeRow(idx)}
+                              title="Delete row"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className="secondary compact-secondary"
+                  onClick={addRow}
+                >
+                  <Plus size={15} style={{ marginRight: "4px" }} /> Add Row
+                </button>
+                <div style={{ color: "#64748b", fontSize: "13px" }}>
+                  Total rows: <strong>{totalRows}</strong>
+                </div>
+              </div>
+
+              {/* Validation Errors Panel */}
+              {hasErrors && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "100px", overflowY: "auto", border: "1px solid #fee2e2", borderRadius: "8px", background: "#fff5f5", padding: "10px" }}>
+                  <span style={{ fontSize: "13px", fontWeight: "700", color: "#991b1b" }}>Validation errors detected:</span>
+                  {validatedRows.map((row, idx) => {
+                    if (row.isValid) return null;
+                    return (
+                      <div key={row.id} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#b91c1c" }}>
+                        <AlertCircle size={13} /> Row {idx + 1}: {row.errors.join(", ")}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "10px", borderTop: "1px solid #e2e8f0", paddingTop: "14px" }}>
+                <button className="secondary" type="button" onClick={onClose}>
+                  Cancel
+                </button>
+                <button
+                  className="primary"
+                  type="button"
+                  onClick={handleConfirmSave}
+                  disabled={hasErrors}
+                >
+                  Save & Add Assets ({totalRows})
+                </button>
+              </div>
+            </>
+          ) : (
+            <div 
+              className={`csv-dropzone ${dragActive ? "dragover" : ""}`}
+              onDragEnter={handleDrag}
+              onDragOver={handleDrag}
+              onDragLeave={handleDrag}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById("csv-file-input").click()}
+            >
+              <Download size={36} style={{ transform: "rotate(180deg)", opacity: 0.6 }} />
+              <strong>Drag and drop your CSV file here</strong>
+              <p>or click to browse from your device</p>
+              <input 
+                type="file" 
+                accept=".csv" 
+                onChange={handleFileChange} 
+                style={{ display: "none" }} 
+                id="csv-file-input" 
+              />
+              <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
+                <button type="button" className="primary" style={{ padding: "8px 16px", borderRadius: "8px", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); document.getElementById("csv-file-input").click(); }}>
+                  Select CSV File
+                </button>
+                <button type="button" className="secondary" style={{ padding: "8px 16px", borderRadius: "8px", cursor: "pointer" }} onClick={downloadTemplate}>
+                  Download Template CSV
+                </button>
+              </div>
+              {errorMsg && <div className="form-error" style={{ marginTop: "12px" }}>{errorMsg}</div>}
+              
+              <div style={{ marginTop: "20px", fontSize: "12px", color: "#64748b", textAlign: "left", width: "100%", borderTop: "1px solid #e2e8f0", paddingTop: "16px" }} onClick={(e) => e.stopPropagation()}>
+                <strong style={{ display: "block", marginBottom: "8px" }}>Expected Columns:</strong>
+                <code>Name*, Category*, {user.role === "admin" ? "Company*," : ""} Brand, Model, Serial Number, Purchase Date (YYYY-MM-DD), Warranty End (YYYY-MM-DD), Location, Branch, Department, Status, Notes</code>
+                <small style={{ display: "block", marginTop: "6px", fontStyle: "italic" }}>* indicates required columns.</small>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, initialSelectedId }) {
   const [query, setQuery] = useState("");
   const [filterClientId, setFilterClientId] = useState(user.role === "admin" ? (data.clients[0]?.id || "") : user.clientId);
@@ -2962,6 +3555,40 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
   const [selectedId, setSelectedId] = useState(scopedAssets[0]?.id);
   const [assetView, setAssetView] = useState("details");
   const [showAssetModal, setShowAssetModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+
+  function bulkAddAssets(newAssets) {
+    setData((current) => {
+      const updatedAssets = [...newAssets, ...current.assets];
+      const companiesInvolved = [...new Set(newAssets.map((a) => a.clientId))];
+      let nextState = { ...current, assets: updatedAssets };
+
+      companiesInvolved.forEach((clientId) => {
+        const companyAssetsCount = newAssets.filter((a) => a.clientId === clientId).length;
+        const companyName = current.clients.find((c) => c.id === clientId)?.companyName || "Company";
+        nextState = withNotification(nextState, {
+          type: "asset_created",
+          title: "Assets added in bulk",
+          message: `${companyAssetsCount} assets were added in bulk by ${user.role} for ${companyName}.`,
+          clientId,
+          actorRole: user.role,
+          actorName: user.name,
+          entityType: "asset",
+          entityId: "bulk-add"
+        });
+      });
+
+      return nextState;
+    });
+
+    setShowBulkModal(false);
+    notify(`Successfully added ${newAssets.length} assets.`);
+
+    if (newAssets.length > 0) {
+      setSelectedId(newAssets[0].id);
+      setAssetView("details");
+    }
+  }
   const assetCategories = data.assetCategories || [];
   const editableClients = user.role === "admin" ? data.clients : data.clients.filter((client) => client.id === user.clientId);
   const selectedClient = editableClients.find((client) => client.id === filterClientId) || editableClients[0];
@@ -3280,9 +3907,14 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
           <span className="eyebrow">Assets</span>
           <h2>{user.role === "admin" ? "Admin asset library" : "Your assets"}</h2>
         </div>
-        <button className="primary" type="button" onClick={openAssetForm}>
-          <Plus size={16} /> {user.role === "client" ? "+ Asset" : "Add asset"}
-        </button>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button className="secondary" type="button" onClick={() => setShowBulkModal(true)}>
+            <Plus size={16} /> Bulk Add Assets
+          </button>
+          <button className="primary" type="button" onClick={openAssetForm}>
+            <Plus size={16} /> {user.role === "client" ? "+ Asset" : "Add asset"}
+          </button>
+        </div>
       </div>
 
       <div className="panel assets-rail">
@@ -3426,11 +4058,16 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
             <Archive size={28} />
             <h2>{user.role === "admin" ? "No assets yet" : "No assets available"}</h2>
             <p>{user.role === "admin" ? "Create the first asset to start tracking lifecycle, service, and media records." : "No assets are available for this account right now."}</p>
-            {user.role === "admin" && (
-              <button className="primary" type="button" onClick={openAssetForm}>
-                <Plus size={16} /> Add asset
+            <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
+              <button className="secondary" type="button" onClick={() => setShowBulkModal(true)}>
+                <Plus size={16} /> Bulk Add Assets
               </button>
-            )}
+              {user.role === "admin" && (
+                <button className="primary" type="button" onClick={openAssetForm}>
+                  <Plus size={16} /> Add asset
+                </button>
+              )}
+            </div>
           </div>
         )}
         {showAssetModal && (
@@ -3447,6 +4084,15 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
               <AssetForm clients={editableClients} categories={selectedCompanyCategories} existingAssets={data.assets} onCreate={createAsset} lockedClientId={filterClientId || (user.role === "client" ? user.clientId : "")} />
             </div>
           </div>
+        )}
+        {showBulkModal && (
+          <BulkAssetCreatorModal
+            user={user}
+            clients={editableClients}
+            onImport={bulkAddAssets}
+            onClose={() => setShowBulkModal(false)}
+            existingAssets={data.assets}
+          />
         )}
       </div>
     </section>
