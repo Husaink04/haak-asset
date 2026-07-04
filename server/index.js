@@ -44,7 +44,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadRoot = path.resolve(__dirname, "..", process.env.UPLOAD_DIR || "uploads");
 const distRoot = path.resolve(__dirname, "..", "dist");
-const emailLogoPath = path.resolve(__dirname, "..", "public", "email-logo.png");
+const emailLogoPath = fs.existsSync(path.resolve(__dirname, "..", "dist", "email-logo.png"))
+  ? path.resolve(__dirname, "..", "dist", "email-logo.png")
+  : path.resolve(__dirname, "..", "public", "email-logo.png");
 const mailFrom = process.env.MAIL_FROM || process.env.SMTP_USER || "HAAK Asset Management <no-reply@haak.local>";
 const emailLogoCid = "haak-email-logo@haak-assets";
 const maxUploadBytes = Number(process.env.MAX_UPLOAD_BYTES || 10 * 1024 * 1024);
@@ -213,21 +215,25 @@ async function sendMailUnified(options) {
     const fromEmail = process.env.MAIL_FROM || 'no-reply@haak.local';
     const recipients = Array.isArray(options.to) ? options.to : [options.to];
 
+    // Replace CID references with absolute URLs for Brevo as it doesn't support CIDs
+    const logoUrl = `${getAppUrl()}/email-logo.png`;
+    let htmlContent = options.html;
+    if (htmlContent && typeof htmlContent === "string") {
+      htmlContent = htmlContent.replaceAll(`cid:${emailLogoCid}`, logoUrl);
+    }
+
     const brevoAttachments = [];
-    const brevoInlineImages = [];
     if (options.attachments && Array.isArray(options.attachments)) {
       for (const att of options.attachments) {
+        // Skip attaching the inline logo to save bandwidth since it is served from the app URL
+        if (att.cid === emailLogoCid) continue;
+
         if (att.path && fs.existsSync(att.path)) {
           const content = fs.readFileSync(att.path).toString("base64");
-          const brevoAttachment = {
+          brevoAttachments.push({
             content,
             name: att.filename
-          };
-          if (att.cid) {
-            brevoInlineImages.push({ ...brevoAttachment, cid: att.cid });
-          } else {
-            brevoAttachments.push(brevoAttachment);
-          }
+          });
         }
       }
     }
@@ -237,13 +243,10 @@ async function sendMailUnified(options) {
       to: recipients.map(email => ({ email })),
       subject: options.subject,
       textContent: options.text,
-      htmlContent: options.html
+      htmlContent: htmlContent
     };
     if (brevoAttachments.length > 0) {
       payload.attachment = brevoAttachments;
-    }
-    if (brevoInlineImages.length > 0) {
-      payload.inlineImage = brevoInlineImages;
     }
 
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -274,7 +277,7 @@ async function sendMailUnified(options) {
           resendAttachments.push({
             content,
             filename: att.filename,
-            cid: att.cid
+            contentId: att.cid
           });
         }
       }
