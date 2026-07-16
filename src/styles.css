@@ -3323,6 +3323,10 @@ dl dt {
   -webkit-backdrop-filter: blur(12px);
 }
 
+.modal-backdrop-hidden {
+  display: none;
+}
+
 .modal-card {
   width: min(760px, 100%);
   max-height: calc(100vh - 48px);

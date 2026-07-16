@@ -1455,7 +1455,7 @@ function CompanyForm({ onCreate, className = "" }) {
   );
 }
 
-function EngineerModal({ engineers, onClose, onCreate, onUpdateStatus }) {
+function EngineerModal({ engineers, isOpen, onClose, onCreate, onUpdateStatus }) {
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -1470,10 +1470,11 @@ function EngineerModal({ engineers, onClose, onCreate, onUpdateStatus }) {
     event.preventDefault();
     if (!form.name.trim()) return;
     onCreate(form);
+    setForm({ name: "", phone: "", status: "active" });
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div className={`modal-backdrop${isOpen ? "" : " modal-backdrop-hidden"}`} role="presentation" aria-hidden={!isOpen}>
       <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="engineer-modal-title" onClick={(event) => event.stopPropagation()}>
         <div className="panel-head">
           <div>
@@ -2126,20 +2127,22 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
         </div>
 
       </div>
-      {showCompanyModal && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setShowCompanyModal(false)}>
-          <div className="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="company-modal-title" onClick={(event) => event.stopPropagation()}>
-            <div className="panel-head">
-              <div>
-                <span className="eyebrow">Company onboarding</span>
-                <h2 id="company-modal-title">Add company</h2>
-              </div>
-              <button className="secondary modal-close" type="button" onClick={() => setShowCompanyModal(false)}>Close</button>
+      <div
+        className={`modal-backdrop${showCompanyModal ? "" : " modal-backdrop-hidden"}`}
+        role="presentation"
+        aria-hidden={!showCompanyModal}
+      >
+        <div className="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="company-modal-title" onClick={(event) => event.stopPropagation()}>
+          <div className="panel-head">
+            <div>
+              <span className="eyebrow">Company onboarding</span>
+              <h2 id="company-modal-title">Add company</h2>
             </div>
-            <CompanyForm onCreate={createCompanyFromModal} className="modal-form-panel" />
+            <button className="secondary modal-close" type="button" onClick={() => setShowCompanyModal(false)}>Close</button>
           </div>
+          <CompanyForm onCreate={createCompanyFromModal} className="modal-form-panel" />
         </div>
-      )}
+      </div>
     </section>
   );
 }
@@ -2955,7 +2958,7 @@ function LifecycleManager({ asset, onAddLifecycle }) {
   );
 }
 
-function BulkAssetCreatorModal({ user, clients, onImport, onClose, existingAssets }) {
+function BulkAssetCreatorModal({ user, clients, isOpen, onImport, onClose, existingAssets }) {
   const [activeTab, setActiveTab] = useState("spreadsheet"); // "spreadsheet" or "csv"
   const [dragActive, setDragActive] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -3265,7 +3268,7 @@ function BulkAssetCreatorModal({ user, clients, onImport, onClose, existingAsset
   };
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div className={`modal-backdrop${isOpen ? "" : " modal-backdrop-hidden"}`} role="presentation" aria-hidden={!isOpen}>
       <div className="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="bulk-modal-title" onClick={(event) => event.stopPropagation()} style={{ maxWidth: "95%", width: "1250px" }}>
         <div className="panel-head">
           <div>
@@ -3556,6 +3559,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
   const [assetView, setAssetView] = useState("details");
   const [showAssetModal, setShowAssetModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkFormKey, setBulkFormKey] = useState(0);
 
   function bulkAddAssets(newAssets) {
     setData((current) => {
@@ -3582,6 +3586,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
     });
 
     setShowBulkModal(false);
+    setBulkFormKey((current) => current + 1);
     notify(`Successfully added ${newAssets.length} assets.`);
 
     if (newAssets.length > 0) {
@@ -4070,8 +4075,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
             </div>
           </div>
         )}
-        {showAssetModal && (
-          <div className="modal-backdrop" role="presentation" onClick={() => setShowAssetModal(false)}>
+        <div className={`modal-backdrop${showAssetModal ? "" : " modal-backdrop-hidden"}`} role="presentation" aria-hidden={!showAssetModal}>
             <div className="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="asset-modal-title" onClick={(event) => event.stopPropagation()}>
               <div className="panel-head">
                 <div>
@@ -4083,17 +4087,16 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
               {user.role === "admin" && <AssetCategoryManager categories={selectedCompanyCategories} onCreateCategory={createCategory} />}
               <AssetForm clients={editableClients} categories={selectedCompanyCategories} existingAssets={data.assets} onCreate={createAsset} lockedClientId={filterClientId || (user.role === "client" ? user.clientId : "")} />
             </div>
-          </div>
-        )}
-        {showBulkModal && (
-          <BulkAssetCreatorModal
+        </div>
+        <BulkAssetCreatorModal
+            key={bulkFormKey}
             user={user}
             clients={editableClients}
+            isOpen={showBulkModal}
             onImport={bulkAddAssets}
             onClose={() => setShowBulkModal(false)}
             existingAssets={data.assets}
-          />
-        )}
+        />
       </div>
     </section>
   );
@@ -5756,7 +5759,7 @@ export default function App() {
       {view === "service" && user.role === "client" && <ClientServiceHistoryPage scopedAssets={scopedAssets} data={data} />}
       {view === "settings" && user.role === "admin" && <AdminSettingsPage data={data} notify={notify} onUpdateClientCredentials={updateClientCredentials} onResolveCredentialRequest={resolveCredentialRequest} onChangeAdminPassword={changeAdminPassword} onUpdateAdminAlertEmail={updateAdminAlertEmail} onSendAdminAlertTest={sendAdminAlertTest} />}
       {view === "settings" && user.role === "client" && <ClientSettingsPage user={user} data={data} notify={notify} onSubmitCredentialRequest={submitCredentialRequest} />}
-      {showEngineerModal && user.role === "admin" && <EngineerModal engineers={data.engineers || []} onClose={() => setShowEngineerModal(false)} onCreate={createEngineer} onUpdateStatus={updateEngineerStatus} />}
+      {user.role === "admin" && <EngineerModal engineers={data.engineers || []} isOpen={showEngineerModal} onClose={() => setShowEngineerModal(false)} onCreate={createEngineer} onUpdateStatus={updateEngineerStatus} />}
     </Shell>
   );
 }
