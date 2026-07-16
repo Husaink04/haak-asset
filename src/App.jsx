@@ -263,7 +263,7 @@ function saveStoredUser(nextUser) {
 function normalizeView(nextView, user) {
   const allowedViews = user?.role === "admin"
     ? new Set(["dashboard", "companies", "assets", "appeals", "service", "settings"])
-    : new Set(["dashboard", "assets", "appeals", "service", "settings"]);
+    : new Set(["dashboard", "assets", "appeals", "service", "settings", "terms"]);
   return allowedViews.has(nextView) ? nextView : "dashboard";
 }
 
@@ -918,8 +918,9 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
         ["dashboard", "Dashboard", Archive],
         ["assets", "My Assets", FileText],
         ["appeals", "Issues", MessageSquare],
-        ["service", "Service History", History],
-      ["settings", "Settings", ShieldCheck]
+      ["service", "Service History", History],
+      ["settings", "Settings", ShieldCheck],
+      ["terms", "Terms & Conditions", FileText]
     ];
 
   useEffect(() => {
@@ -2480,36 +2481,18 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
 
   function canContinue() {
     if (step === 0) {
-      const client = clients.find((c) => c.id === form.clientId);
-      const branches = clientBranches(client);
-      const selectedBranchObj = branches.find((b) => b.id === form.branchId);
-      const hasDepts = selectedBranchObj?.departments?.length > 0;
-      return Boolean(
-        form.clientId &&
-        form.branchId &&
-        (!hasDepts || form.department) &&
-        form.location.trim() &&
-        form.userName.trim()
-      );
+      return Boolean(form.clientId);
     }
     if (step === 1) {
       return Boolean(
         form.category &&
-        form.name.trim() &&
-        form.brand.trim() &&
-        form.model.trim() &&
-        form.serialNumber.trim()
+        form.name.trim()
       );
     }
     if (step === 2) {
-      return Boolean(
-        form.status &&
-        form.purchaseDate &&
-        form.warrantyEndDate &&
-        form.notes.trim()
-      );
+      return Boolean(form.status);
     }
-    return Boolean(form.image);
+    return true;
   }
 
   function goToStep(index) {
@@ -2568,7 +2551,8 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
           )}
           <label>
             Branch
-            <select value={form.branchId} onChange={(event) => update("branchId", event.target.value)} required>
+            <select value={form.branchId} onChange={(event) => update("branchId", event.target.value)}>
+              <option value="">No branch selected</option>
               {clientBranches(clients.find((client) => client.id === form.clientId)).map((branch) => (
                 <option key={branch.id} value={branch.id}>{branch.name}</option>
               ))}
@@ -2592,12 +2576,12 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
             );
           })()}
           <label>
-            Location *
-            <input placeholder="Office, department, site, or room" value={form.location} onChange={(event) => update("location", event.target.value)} required />
+            Location
+            <input placeholder="Office, department, site, or room (optional)" value={form.location} onChange={(event) => update("location", event.target.value)} />
           </label>
           <label>
-            User name *
-            <input placeholder="Assigned user name" value={form.userName} onChange={(event) => update("userName", event.target.value)} required />
+            User name
+            <input placeholder="Assigned user name (optional)" value={form.userName} onChange={(event) => update("userName", event.target.value)} />
           </label>
         </div>
       )}
@@ -2617,16 +2601,16 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
             <input placeholder="Dell Latitude 5440" value={form.name} onChange={(event) => update("name", event.target.value)} required />
           </label>
           <label>
-            Brand *
-            <input placeholder="Dell, HP, Lenovo" value={form.brand} onChange={(event) => update("brand", event.target.value)} required />
+            Brand
+            <input placeholder="Dell, HP, Lenovo (optional)" value={form.brand} onChange={(event) => update("brand", event.target.value)} />
           </label>
           <label>
-            Model *
-            <input placeholder="Latitude 5440" value={form.model} onChange={(event) => update("model", event.target.value)} required />
+            Model
+            <input placeholder="Latitude 5440 (optional)" value={form.model} onChange={(event) => update("model", event.target.value)} />
           </label>
           <label>
-            Serial number *
-            <input placeholder="Serial or service tag" value={form.serialNumber} onChange={(event) => update("serialNumber", event.target.value)} required />
+            Serial number
+            <input placeholder="Serial or service tag (optional)" value={form.serialNumber} onChange={(event) => update("serialNumber", event.target.value)} />
           </label>
         </div>
       )}
@@ -2647,16 +2631,16 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
             </select>
           </label>
           <label>
-            Purchase date *
-            <input type="date" value={form.purchaseDate} onChange={(event) => update("purchaseDate", event.target.value)} required />
+            Purchase date
+            <input type="date" value={form.purchaseDate} onChange={(event) => update("purchaseDate", event.target.value)} />
           </label>
           <label>
-            Warranty end date *
-            <input type="date" value={form.warrantyEndDate} onChange={(event) => update("warrantyEndDate", event.target.value)} required />
+            Warranty end date
+            <input type="date" value={form.warrantyEndDate} onChange={(event) => update("warrantyEndDate", event.target.value)} />
           </label>
           <label>
-            Notes *
-            <textarea placeholder="Additional technical details..." value={form.notes} onChange={(event) => update("notes", event.target.value)} required />
+            Notes
+            <textarea placeholder="Additional technical details (optional)" value={form.notes} onChange={(event) => update("notes", event.target.value)} />
           </label>
         </div>
       )}
@@ -2669,7 +2653,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
             <AssetVisual asset={{ images: form.image ? [form.image] : [], name: form.name }} className="asset-editor-preview" />
             <div className="asset-editor-media-controls">
               <label className="file-field">
-                Upload image *
+                Upload image (optional)
                 <input type="file" accept=".jpg,.jpeg,.png,.webp,.gif" onChange={uploadAssetImage} disabled={uploadingImage} />
                 <span><Camera size={15} /> {form.image ? "Upload replacement image" : `Upload first image (JPG/PNG/WEBP, max ${MAX_UPLOAD_MB} MB)`}</span>
               </label>
@@ -2966,8 +2950,8 @@ function BulkAssetCreatorModal({ user, clients, isOpen, onImport, onClose, exist
   const createEmptyRow = () => ({
     id: `row-${Date.now()}-${Math.random()}`,
     name: "",
-    category: "",
-    clientId: user.role === "client" ? user.clientId : "",
+    category: clients[0]?.assetCategories?.[0] || "",
+    clientId: user.role === "client" ? user.clientId : (clients[0]?.id || ""),
     branchId: "",
     serialNumber: "",
     brand: "",
@@ -3130,7 +3114,7 @@ function BulkAssetCreatorModal({ user, clients, isOpen, onImport, onClose, exist
   };
 
   const handleFile = (selectedFile) => {
-    if (!selectedFile.name.endsWith(".csv")) {
+    if (!selectedFile.name.toLowerCase().endsWith(".csv")) {
       setErrorMsg("Please upload a valid CSV file.");
       return;
     }
@@ -3146,7 +3130,7 @@ function BulkAssetCreatorModal({ user, clients, isOpen, onImport, onClose, exist
           return;
         }
 
-        const headers = rawLines[0].map(h => h.trim().toLowerCase());
+        const headers = rawLines[0].map(h => h.replace(/^\uFEFF/, "").trim().toLowerCase().replace(/\*/g, ""));
         const rawRows = rawLines.slice(1);
 
         const nameIdx = headers.findIndex(h => h.includes("name"));
@@ -3198,6 +3182,8 @@ function BulkAssetCreatorModal({ user, clients, isOpen, onImport, onClose, exist
             if (matchedClient) {
               clientId = matchedClient.id;
             }
+          } else if (clients.length === 1) {
+            clientId = clients[0].id;
           }
 
           let branchId = "";
@@ -4812,6 +4798,57 @@ function InactiveCompanyPage({ clientBrand }) {
   );
 }
 
+const STANDARD_TERMS = [
+  "Payment for the annual maintenance contract is payable 100% in advance.",
+  "This contract covers problems arising from the normal functioning of desktop and laptop computers. It does not cover breakdowns caused wholly or partly by misuse, unsuitable environmental conditions, fire, theft, riots, accidents, or other exceptional circumstances. Customers are advised to maintain suitable insurance for such contingencies.",
+  "HAAK INFOTECH will endeavour to attend registered service calls on the same or next working day, subject to engineer availability, location, access, and circumstances beyond reasonable control.",
+  "The customer shall not open, alter, tamper with, intrude upon, or modify the supplied system or peripheral configuration without the presence or prior written approval of an authorised HAAK INFOTECH engineer.",
+  "Only authorised HAAK INFOTECH personnel may alter or change any system or peripheral unit covered by the contract.",
+  "The contract may be treated as null and void if a third party undertakes repairs, or if the equipment is modified, relocated, or altered without prior written consent from HAAK INFOTECH.",
+  "IT services covered by the AMC are provided without additional service charges. Replacement parts and components are payable by the customer at actual cost after an estimate is provided. When a required component is unavailable, HAAK INFOTECH may recommend a suitable upgrade at the customer's cost.",
+  "The customer is responsible for maintaining regular and adequate data backups. HAAK INFOTECH is not responsible for loss of data for any reason.",
+  "HAAK INFOTECH will keep confidential any non-public information learned while providing services and will not knowingly disclose it in a manner adverse to the customer's interests, except where disclosure is legally required.",
+  "Maintenance will be provided only at the location specified in the service arrangement. Work outside the standard service area may require prior approval and additional charges.",
+  "The customer shall provide engineers with reasonable access to the system, premises, and necessary assistance required to perform the service.",
+  "Any replacement part installed and any faulty part removed remain the customer's property unless otherwise agreed in writing.",
+  "Contract charges remain fixed for the agreed contract period. Rates prevailing at the time of renewal will apply to the renewed period.",
+  "Neither party is liable for delay or failure caused by events beyond reasonable control, including natural events, government action, accidents, strikes, lockdowns, or similar contingencies.",
+  "The customer may not assign this service arrangement or any related benefit or interest to another person or agency without prior written consent from HAAK INFOTECH.",
+  "Either party may terminate the contract for breach by providing one month's prior written notice, subject to any rights and obligations accrued before termination.",
+  "These standard conditions may be updated from time to time. The current conditions accepted for the applicable contract period will govern the service arrangement.",
+  "Installation or support for hardware or software purchased from a vendor other than HAAK INFOTECH may be chargeable.",
+  "The customer is responsible for obtaining and maintaining appropriate licences for all software. HAAK INFOTECH is not responsible for unlicensed or non-compliant software.",
+  "Work on weekly holidays, public holidays, or outside standard business hours is subject to prior arrangement and may be charged on a per-call basis at the prevailing rate."
+];
+
+function TermsPage() {
+  return (
+    <section className="terms-page">
+      <article className="panel terms-document">
+        <header className="terms-brand">
+          <img src="/haak-logo-transparent.png" alt="HAAK INFOTECH" />
+          <div>
+            <span className="eyebrow">Annual Maintenance Contract</span>
+            <h2>Standard Terms &amp; Conditions</h2>
+            <p>HAAK INFOTECH</p>
+          </div>
+        </header>
+        <div className="terms-intro">
+          <ShieldCheck size={22} />
+          <p>These standard conditions describe the service coverage, responsibilities, and limitations applicable to annual maintenance services.</p>
+        </div>
+        <ol className="terms-list">
+          {STANDARD_TERMS.map((term) => <li key={term}>{term}</li>)}
+        </ol>
+        <footer className="terms-footer">
+          <strong>HAAK INFOTECH</strong>
+          <span>Reliable IT support and maintenance</span>
+        </footer>
+      </article>
+    </section>
+  );
+}
+
 function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveCredentialRequest, onChangeAdminPassword, onUpdateAdminAlertEmail, onSendAdminAlertTest }) {
   const clientUsers = data.users.filter((user) => user.role === "client");
   const adminUser = data.users.find((item) => item.role === "admin");
@@ -5759,6 +5796,7 @@ export default function App() {
       {view === "service" && user.role === "client" && <ClientServiceHistoryPage scopedAssets={scopedAssets} data={data} />}
       {view === "settings" && user.role === "admin" && <AdminSettingsPage data={data} notify={notify} onUpdateClientCredentials={updateClientCredentials} onResolveCredentialRequest={resolveCredentialRequest} onChangeAdminPassword={changeAdminPassword} onUpdateAdminAlertEmail={updateAdminAlertEmail} onSendAdminAlertTest={sendAdminAlertTest} />}
       {view === "settings" && user.role === "client" && <ClientSettingsPage user={user} data={data} notify={notify} onSubmitCredentialRequest={submitCredentialRequest} />}
+      {view === "terms" && user.role === "client" && <TermsPage />}
       {user.role === "admin" && <EngineerModal engineers={data.engineers || []} isOpen={showEngineerModal} onClose={() => setShowEngineerModal(false)} onCreate={createEngineer} onUpdateStatus={updateEngineerStatus} />}
     </Shell>
   );
