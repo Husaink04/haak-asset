@@ -357,90 +357,83 @@ function notificationToneColor(tone = "info") {
   return "#ef1f24";
 }
 
+function buildEmailTemplate(subject, content) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="background:#f4f5f7;padding:30px 15px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="max-width:600px;background:#111315;border-radius:12px;overflow:hidden;">
+        <tr><td align="center" style="background:#071321;padding:32px 25px;border-bottom:3px solid #e31e24;">
+          <img src="cid:${emailLogoCid}" alt="HAAK INFOTECH" width="250" style="display:block;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;">
+        </td></tr>
+        <tr><td style="padding:40px 45px;color:#ffffff;min-height:250px;">${content}</td></tr>
+        <tr><td style="background:#071321;padding:28px 45px;border-top:1px solid #252b33;">
+          <p style="margin:0 0 6px;color:#ffffff;font-size:14px;font-weight:bold;">HAAK INFOTECH</p>
+          <p style="margin:0 0 14px;color:#9ca3af;font-size:12px;">Innovate | Build | Empower</p>
+          <p style="margin:0;color:#687080;font-size:11px;line-height:1.6;">This is an automated notification from HAAK Asset Management. Please do not reply to this email.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+function emailBadge(label, color = "#e31e24") {
+  return `<table cellpadding="0" cellspacing="0" border="0" role="presentation"><tr><td style="background:${color};color:#ffffff;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">${escapeHtml(label)}</td></tr></table>`;
+}
+
+function emailHeading(title, message) {
+  return `<h1 style="margin:25px 0 10px;color:#ffffff;font-size:30px;line-height:1.3;font-weight:600;">${escapeHtml(title)}</h1>
+    <p style="margin:0 0 30px;color:#9ca3af;font-size:16px;line-height:1.6;">${escapeHtml(message)}</p>`;
+}
+
+function emailDetails(rows) {
+  const content = rows.filter((row) => row?.value).map((row) => `<tr>
+    <td width="35%" style="padding:10px 0;color:#7f8797;font-size:14px;vertical-align:top;">${escapeHtml(row.label)}</td>
+    <td style="padding:10px 0;color:#ffffff;font-size:14px;overflow-wrap:anywhere;">${row.html || escapeHtml(row.value)}</td>
+  </tr>`).join("");
+  return `<div style="border-top:1px solid #30343b;margin:0 0 25px;"></div><table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation">${content}</table>`;
+}
+
+function emailCta(appUrl, label = "Open Asset Portal") {
+  if (!appUrl) return "";
+  return `<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin-top:35px;"><tr><td align="center" bgcolor="#e31e24" style="border-radius:7px;"><a href="${escapeHtml(appUrl)}" target="_blank" style="display:inline-block;padding:15px 28px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold;">${escapeHtml(label)} &rarr;</a></td></tr></table>`;
+}
+
+function emailTaskSummary(notification) {
+  if (!notification.issueTitle) return "";
+  return `<p style="margin:0 0 5px;color:#6b7280;font-size:12px;font-weight:bold;letter-spacing:1px;">ISSUE</p>
+    <p style="margin:0 0 8px;color:#ffffff;font-size:20px;font-weight:bold;">${escapeHtml(notification.issueTitle)}</p>
+    ${notification.assetName ? `<p style="margin:0 0 25px;color:#9ca3af;font-size:15px;">${escapeHtml(notification.assetName)}</p>` : ""}
+    ${notification.description ? `<p style="margin:0 0 30px;color:#c4c9d4;font-size:15px;line-height:1.7;">${escapeHtml(notification.description)}</p>` : ""}`;
+}
+
 function buildNotificationEmail(notification, appUrl) {
   const accent = notificationToneColor(notification.tone);
-  const safeTitle = escapeHtml(notification.title);
-  const safeMessage = escapeHtml(notification.message);
-  const company = escapeHtml(notification.companyName || "HAAK Asset Management");
-  const actor = escapeHtml(notification.actorName || notification.actorRole || "System");
-  const entityType = escapeHtml(notification.entityType || "Activity");
-  const createdAt = escapeHtml(new Date(notification.createdAt || Date.now()).toLocaleString("en-IN", {
+  const createdAt = new Date(notification.createdAt || Date.now()).toLocaleString("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Kolkata"
-  }));
-  const cta = appUrl
-    ? `<tr>
-        <td style="padding: 8px 32px 34px;">
-          <a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#ef1f24;color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;padding:13px 20px;border-radius:6px;">Open Asset Portal</a>
-        </td>
-      </tr>`
-    : "";
-
-  return `
-<!doctype html>
-<html>
-  <body style="margin:0;padding:0;background:#f3f5f8;font-family:Arial,Helvetica,sans-serif;color:#111827;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f5f8;margin:0;padding:28px 12px;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-shadow:0 16px 42px rgba(2,11,24,0.12);">
-            <tr>
-              <td style="background:#020b18;padding:28px 32px 24px;border-bottom:4px solid #ef1f24;">
-                <img src="cid:${emailLogoCid}" alt="HAAK INFOTECH" width="360" style="display:block;width:100%;max-width:360px;height:auto;border:0;outline:none;text-decoration:none;">
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:30px 32px 10px;">
-                <div style="display:inline-block;background:${accent};color:#ffffff;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:6px 10px;border-radius:999px;">${escapeHtml(notification.tone || "info")}</div>
-                <h1 style="margin:16px 0 10px;font-size:26px;line-height:1.22;color:#07111f;">${safeTitle}</h1>
-                <p style="margin:0;font-size:16px;line-height:1.65;color:#475569;">${safeMessage}</p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:20px 32px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e7eb;border-radius:10px;background:#f8fafc;">
-                  <tr>
-                    <td style="padding:16px;border-bottom:1px solid #e5e7eb;">
-                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Company</div>
-                      <div style="font-size:15px;font-weight:800;color:#111827;margin-top:4px;">${company}</div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:16px;border-bottom:1px solid #e5e7eb;">
-                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Triggered by</div>
-                      <div style="font-size:15px;font-weight:800;color:#111827;margin-top:4px;">${actor}</div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:16px;border-bottom:1px solid #e5e7eb;">
-                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Record type</div>
-                      <div style="font-size:15px;font-weight:800;color:#111827;margin-top:4px;">${entityType}</div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:16px;">
-                      <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Time</div>
-                      <div style="font-size:15px;font-weight:800;color:#111827;margin-top:4px;">${createdAt}</div>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-            ${cta}
-            <tr>
-              <td style="padding:18px 32px;background:#07111f;color:#94a3b8;font-size:12px;line-height:1.6;">
-                <strong style="color:#ffffff;">HAAK INFOTECH</strong><br>
-                Innovate | Build | Empower<br>
-                This is an automated notification from HAAK Asset Management.
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>`;
+  });
+  const badgeLabel = notification.priority ? `${notification.priority} priority` : (notification.tone || "notification");
+  const content = emailBadge(badgeLabel, accent)
+    + emailHeading(notification.title || "HAAK Notification", notification.message || "There is a new update in your asset portal.")
+    + emailTaskSummary(notification)
+    + emailDetails([
+      { label: "Company", value: notification.companyName || "HAAK Asset Management" },
+      { label: "Record type", value: notification.entityType || "Activity" },
+      { label: "Asset", value: notification.assetName || "" },
+      { label: "Time", value: createdAt }
+    ])
+    + emailCta(appUrl, notification.entityType === "appeal" ? "View Task" : "Open Asset Portal");
+  return buildEmailTemplate(notification.title || "HAAK Notification", content);
 }
 
 function notificationRecipients(notification, state) {
@@ -499,6 +492,19 @@ function buildWelcomeEmailHtml(client, user, plainPassword, appUrl) {
   const safePassword = escapeHtml(plainPassword);
   const safeUrl = escapeHtml(appUrl);
 
+  const content = emailBadge("Welcome", "#16a34a")
+    + emailHeading("Welcome to HAAK Asset Management", `Hello ${client?.contactPerson || user.name || "Client"}, your company ${client?.companyName || "Client Company"} has been registered. You can now access assets, issues, software licenses, and service history.`)
+    + emailDetails([
+      { label: "Company", value: client?.companyName || "Client Company" },
+      { label: "Username", value: user.email, html: `<code style="color:#ffffff;">${safeEmail}</code>` },
+      { label: "Password", value: plainPassword, html: `<code style="color:#ffffff;">${safePassword}</code>` },
+      { label: "Portal", value: appUrl, html: `<a href="${safeUrl}" style="color:#f87171;text-decoration:none;">${safeUrl}</a>` }
+    ])
+    + `<p style="margin:25px 0 0;color:#c4c9d4;font-size:13px;line-height:1.7;">Please change your password immediately after your first login.</p>`
+    + emailCta(appUrl, "Log In to Portal");
+  return buildEmailTemplate("Welcome to HAAK Asset Management - Account Created", content);
+
+  /* Legacy markup retained below for reference; the shared HAAK template above is used. */
   return `
 <!doctype html>
 <html>
@@ -569,6 +575,18 @@ function buildCredentialsUpdatedEmailHtml(client, user, newEmail, newPassword, a
   const safePassword = newPassword ? escapeHtml(newPassword) : "";
   const safeUrl = escapeHtml(appUrl);
 
+  const content = emailBadge("Account Update", "#f59e0b")
+    + emailHeading("Login Credentials Updated", `Hello ${client?.contactPerson || user.name || "Client"}, your HAAK Asset Management login credentials were updated by the administrator.`)
+    + emailDetails([
+      { label: "Username", value: newEmail, html: `<code style="color:#ffffff;">${safeEmail}</code>` },
+      { label: newPassword ? "New Password" : "Password", value: newPassword || "Unchanged", html: newPassword ? `<code style="color:#ffffff;">${safePassword}</code>` : "<span style=\"color:#9ca3af;font-style:italic;\">Unchanged</span>" },
+      { label: "Portal", value: appUrl, html: `<a href="${safeUrl}" style="color:#f87171;text-decoration:none;">${safeUrl}</a>` }
+    ])
+    + `<p style="margin:25px 0 0;color:#c4c9d4;font-size:13px;line-height:1.7;">If you did not request this update, contact the administrator immediately.</p>`
+    + emailCta(appUrl, "Log In to Portal");
+  return buildEmailTemplate("HAAK Asset Management - Account Login Updated", content);
+
+  /* Legacy markup retained below for reference; the shared HAAK template above is used. */
   return `
 <!doctype html>
 <html>
@@ -862,7 +880,11 @@ async function sendEngineerAssignmentEmail({ engineer, appeal, client, asset, as
   const appUrl = getAppUrl();
   const notification = {
     title: "You have been assigned a task",
-    message: `${assignedBy} assigned you the issue "${appeal.title}" for ${client?.companyName || "a client"}. Priority: ${appeal.priority}. Asset: ${asset?.name || "Not specified"}. Details: ${appeal.description}`,
+    message: "A new task has been assigned to you and requires your attention.",
+    priority: appeal.priority,
+    issueTitle: appeal.title,
+    assetName: asset?.name || "Not specified",
+    description: appeal.description,
     companyName: client?.companyName || "HAAK Asset Management",
     actorName: assignedBy,
     actorRole: "admin",
@@ -921,6 +943,10 @@ async function sendAssignmentPreviewEmails(email) {
   const clientPreview = {
     title: "Engineer assigned to your task",
     message: "Rahul Sharma has been assigned to your task \"Laptop is not starting\". You will be notified when there is an update.",
+    priority: "high",
+    issueTitle: "Laptop is not starting",
+    assetName: "Dell Latitude 5420",
+    description: "The laptop does not power on after pressing the power button.",
     companyName: "Sample Client Company",
     actorName: "HAAK Admin",
     actorRole: "admin",
@@ -930,7 +956,11 @@ async function sendAssignmentPreviewEmails(email) {
   };
   const engineerPreview = {
     title: "You have been assigned a task",
-    message: "HAAK Admin assigned you the issue \"Laptop is not starting\" for Sample Client Company. Priority: high. Asset: Dell Latitude 5420. Details: The laptop does not power on after pressing the power button.",
+    message: "A new task has been assigned to you and requires your attention.",
+    priority: "high",
+    issueTitle: "Laptop is not starting",
+    assetName: "Dell Latitude 5420",
+    description: "The laptop does not power on after pressing the power button.",
     companyName: "Sample Client Company",
     actorName: "HAAK Admin",
     actorRole: "admin",
@@ -1442,6 +1472,10 @@ app.patch("/api/appeals/:appealId/assignment", requireAuth, requireAdmin, async 
       message: engineer
         ? `${engineer.name} has been assigned to your task "${appeal.title}". You will be notified when there is an update.`
         : `The engineer assignment for your task "${appeal.title}" has been removed.`,
+      priority: appeal.priority,
+      issueTitle: appeal.title,
+      assetName: asset?.name || "",
+      description: appeal.description,
       clientId: appeal.clientId,
       companyName: client?.companyName || "",
       actorRole: "admin",

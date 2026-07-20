@@ -28,6 +28,7 @@ import {
   Smartphone,
   Sun,
   Trash2,
+  X,
   UserRound,
   Wifi,
   WifiOff,
@@ -923,6 +924,7 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
   const [showNotifications, setShowNotifications] = useState(false);
   const [isCompactViewport, setIsCompactViewport] = useState(() => window.matchMedia("(max-width: 1180px)").matches);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [assetMenuOpen, setAssetMenuOpen] = useState(false);
   const isDarkTheme = theme === "dark";
   const shellCollapsed = sidebarCollapsed && !isCompactViewport;
   const nav = user.role === "admin"
@@ -984,6 +986,11 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
     if (isCompactViewport) setMobileNavOpen(false);
   }
 
+  function toggleAssetsMenu() {
+    if (shellCollapsed) setSidebarCollapsed(false);
+    setAssetMenuOpen((current) => !current);
+  }
+
   return (
     <>
       <Toaster richColors closeButton position="top-right" />
@@ -1022,12 +1029,13 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
         <div className="sidebar-section-label">Main</div>
         <nav>
           {nav.map(([id, label, Icon]) => <React.Fragment key={id}>
-            <button className={(view === id || (id === "assets" && view === "software-assets")) ? "active" : ""} onClick={() => selectView(id)} title={shellCollapsed ? label : undefined} aria-label={label}>
+            <button className={(view === id || (id === "assets" && view === "software-assets")) ? "active" : ""} onClick={() => id === "assets" ? toggleAssetsMenu() : selectView(id)} title={shellCollapsed ? label : undefined} aria-label={label} aria-expanded={id === "assets" ? assetMenuOpen : undefined}>
               <Icon size={18} />
               <span className="nav-label">{label}</span>
               {badgeCounts[id] > 0 && <span className="sidebar-count">{badgeCounts[id]}</span>}
+              {id === "assets" && <ChevronRight className={`asset-menu-chevron${assetMenuOpen ? " open" : ""}`} size={16} />}
             </button>
-            {id === "assets" && <div className="asset-subnav">
+            {id === "assets" && assetMenuOpen && <div className="sidebar-asset-subnav">
               <button className={view === "assets" ? "active" : ""} type="button" onClick={() => selectView("assets")}><span className="subnav-dot" /><span className="nav-label">Hardware Assets</span></button>
               <button className={view === "software-assets" ? "active" : ""} type="button" onClick={() => selectView("software-assets")}><span className="subnav-dot" /><span className="nav-label">Software Assets</span>{badgeCounts["software-assets"] > 0 && <span className="sidebar-count">{badgeCounts["software-assets"]}</span>}</button>
             </div>}
@@ -2230,7 +2238,7 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
                   </div>
                   <div className="workspace-panel-actions">
                     <span className={statusClass(selected.status)}>{selected.status}</span>
-                    <button className="secondary workspace-close-button" type="button" onClick={() => setSelectedId("")}>Close</button>
+                    <button className="secondary workspace-close-button" type="button" onClick={() => setSelectedId("")}><X size={16} /> Close</button>
                   </div>
                 </div>
                 <div className="company-overview-grid">
@@ -4136,7 +4144,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
                 <button className={assetView === "edit" ? "active" : ""} type="button" onClick={() => setAssetView("edit")}>Edit asset</button>
               </div>
             )}
-            {selected && <button className="secondary workspace-close-button" type="button" onClick={() => { setSelectedId(""); setAssetView("details"); }}>Close</button>}
+            {selected && <button className="secondary workspace-close-button" type="button" onClick={() => { setSelectedId(""); setAssetView("details"); }}><X size={16} /> Close</button>}
             {user.role === "admin" && (
               <button className="secondary" type="button" onClick={onAddEngineer}>
                 <Plus size={16} /> Add engineer
@@ -4295,7 +4303,7 @@ function SoftwareAssetsPage({ user, data, setData, notify }) {
     (!filterClientId || software.clientId === filterClientId) &&
     [software.softwareName, software.softwareSerial, software.email].join(" ").toLowerCase().includes(query.toLowerCase())
   );
-  const selected = scopedSoftware.find((software) => software.id === selectedId) || filtered[0] || null;
+  const selected = selectedId ? (scopedSoftware.find((software) => software.id === selectedId) || null) : null;
   const formCompany = availableClients.find((client) => client.id === form.clientId);
   const assignableAssets = data.assets.filter((asset) => asset.clientId === form.clientId);
 
@@ -4436,7 +4444,7 @@ function SoftwareAssetsPage({ user, data, setData, notify }) {
       </div>
 
       <div className="panel software-detail">{selected ? <>
-        <div className="panel-head"><div><span className="eyebrow">Software record</span><h2>{selected.softwareName}</h2><p>{selectedCompany?.companyName || "Unknown company"}</p></div><span className={selectedExpired ? "badge inactive" : statusClass(selected.status)}>{selectedExpired ? "Expired" : formatStatusLabel(selected.status)}</span></div>
+        <div className="panel-head"><div><span className="eyebrow">Software record</span><h2>{selected.softwareName}</h2><p>{selectedCompany?.companyName || "Unknown company"}</p></div><div className="workspace-panel-actions"><span className={selectedExpired ? "badge inactive" : statusClass(selected.status)}>{selectedExpired ? "Expired" : formatStatusLabel(selected.status)}</span><button className="secondary workspace-close-button" type="button" onClick={() => setSelectedId("")}><X size={16} /> Close</button></div></div>
         <div className="software-detail-grid">
           <span><strong>Software serial</strong><code>{selected.softwareSerial}</code></span>
           <span><strong>Login email</strong>{selected.email}</span>
@@ -4447,7 +4455,7 @@ function SoftwareAssetsPage({ user, data, setData, notify }) {
         </div>
         <div className="assigned-software-assets"><h3>Assigned hardware assets</h3>{selectedAssignedAssets.length > 0 ? selectedAssignedAssets.map((asset) => <div key={asset.id}><strong>{asset.name}</strong><small>{asset.assetCode} · {asset.userName || "Unassigned user"}</small></div>) : <p className="muted-copy">This license is not assigned to a hardware asset.</p>}</div>
         {user.role === "admin" && <div className="inline-actions"><button className="primary" type="button" onClick={() => editSoftware(selected)}>Edit software</button><button className="secondary" type="button" onClick={() => toggleSoftwareStatus(selected)}>Mark {selected.status === "inactive" ? "active" : "inactive"}</button></div>}
-      </> : <div className="empty-state"><Archive size={36} /><h2>Select software</h2><p>Choose a software license to view its credentials and assigned devices.</p></div>}</div>
+      </> : <div className="panel empty-state software-empty-state"><ShieldCheck size={36} /><h2>No software selected</h2><p>Choose a software license from the directory to open its details.</p></div>}</div>
     </div>
   </section>;
 }
@@ -4567,6 +4575,10 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify,
         type: "appeal_created",
         title: "Issue raised",
         message: `${appeal.title} was raised by ${user.name}.`,
+        priority: appeal.priority,
+        issueTitle: appeal.title,
+        assetName: asset.name,
+        description: appeal.description,
         clientId: appeal.clientId,
         actorRole: user.role,
         actorName: user.name,
@@ -4665,30 +4677,6 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify,
               <span className={statusClass(selected.priority)}>{selected.priority}</span>
               <h2>{selected.title}</h2>
               <p>{getAsset(selected.assetId)?.name} - {getClient(selected.clientId)?.companyName}</p>
-              <div className="appeal-timestamps">
-                <span>Raised {formatTimestamp(selected.createdAt)}</span>
-                <span>Last updated {formatTimestamp(selected.updatedAt)}</span>
-              </div>
-            </div>
-            {user.role === "admin" && (
-              selected.status === "resolved" ? (
-                <button className="secondary" type="button" onClick={() => updateSelectedAppeal({ status: "open" }, "Appeal moved back to open.")}>Undo resolve</button>
-              ) : selected.status === "approved" ? (
-                <span className="badge approved">Approved</span>
-              ) : (
-                <select value={selected.status} onChange={(event) => setStatus(event.target.value)}>
-                  <option value="open">Open</option>
-                  <option value="in_review">In review</option>
-                  <option value="awaiting_client">Waiting to Client&apos;s approval</option>
-                  <option value="resolved">Resolved</option>
-                  <option value="closed">Closed/Cancelled</option>
-                </select>
-              )
-            )}
-          </div>
-          <div className="issue-record">
-            <div>
-              <span className="eyebrow">Issue details</span>
               <p>{selected.description}</p>
             </div>
             <div className="issue-record-grid">

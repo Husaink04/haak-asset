@@ -1185,18 +1185,30 @@ nav {
   gap: 6px;
 }
 
-.asset-subnav {
+.sidebar-asset-subnav {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   margin: -2px 0 4px 26px;
   padding-left: 10px;
   border-left: 1px solid rgba(226, 232, 240, 0.18);
+  width: calc(100% - 26px);
 }
 
-.asset-subnav button {
+.sidebar-asset-subnav button {
+  width: 100%;
   min-height: 38px;
   padding: 8px 10px;
   font-size: 12px;
+}
+
+.asset-menu-chevron {
+  margin-left: auto;
+  transition: transform 180ms ease;
+}
+
+.asset-menu-chevron.open {
+  transform: rotate(90deg);
 }
 
 .subnav-dot {
@@ -1206,7 +1218,7 @@ nav {
   background: currentColor;
 }
 
-.sidebar-collapsed .asset-subnav {
+.sidebar-collapsed .sidebar-asset-subnav {
   display: none;
 }
 
