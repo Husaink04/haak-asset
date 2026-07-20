@@ -61,6 +61,7 @@ body {
 [data-theme="dark"] .stat,
 [data-theme="dark"] .dashboard-hero,
 [data-theme="dark"] .dashboard-health span,
+[data-theme="dark"] .dashboard-health-link,
 [data-theme="dark"] .dashboard-list-item,
 [data-theme="dark"] .service-record,
 [data-theme="dark"] .service-record-card,
@@ -1090,7 +1091,44 @@ aside::-webkit-scrollbar-thumb {
 
 .sidebar-top {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 12px;
+}
+
+.sidebar-top .logo {
+  margin-bottom: 0;
+}
+
+.top-collapse-toggle {
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  justify-content: center;
+  border: 1px solid rgba(226, 232, 240, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.top-collapse-toggle span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.sidebar-collapsed .sidebar-top {
+  grid-template-columns: 1fr;
+  justify-items: center;
+}
+
+.mobile-shell .top-collapse-toggle {
+  display: none;
+}
+
+.mobile-shell .mobile-menu-toggle {
+  display: inline-flex;
 }
 
 .logo img {
@@ -1489,7 +1527,8 @@ header h1 {
   gap: 12px;
 }
 
-.dashboard-health span {
+.dashboard-health span,
+.dashboard-health-link {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3323,6 +3362,34 @@ dl dt {
   -webkit-backdrop-filter: blur(12px);
 }
 
+.workspace-panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.workspace-close-button {
+  min-width: 82px;
+}
+
+.dashboard-health-link {
+  appearance: none;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.dashboard-health-link:hover,
+.dashboard-health-link:focus-visible {
+  border-color: var(--haak-red);
+  box-shadow: 0 8px 20px rgba(239, 31, 36, 0.12);
+  transform: translateY(-1px);
+}
+
 .modal-backdrop-hidden {
   display: none;
 }
@@ -3503,6 +3570,153 @@ dl dt {
 
 .engineer-row select {
   min-width: 118px;
+}
+
+.engineer-avatar,
+.engineer-avatar-preview {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.engineer-avatar-preview {
+  width: 72px;
+  height: 72px;
+}
+
+.engineer-avatar img,
+.engineer-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.engineer-photo-field,
+.engineer-photo-control,
+.engineer-card-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.engineer-photo-control {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.engineer-directory {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.engineer-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.engineer-card-copy a {
+  color: #2563eb;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.engineer-card-copy small {
+  color: #64748b;
+}
+
+.engineer-card select {
+  min-width: 105px;
+}
+
+.engineer-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.engineer-card-actions .secondary {
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.engineer-task-box {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.engineer-task-box h3 {
+  margin: 0 0 4px;
+}
+
+.engineer-task-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.engineer-task-row > div,
+.engineer-task-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.engineer-task-row > div:first-child {
+  display: grid;
+}
+
+.engineer-task-row small,
+.muted-copy {
+  color: #64748b;
+}
+
+[data-theme="dark"] .engineer-task-box,
+[data-theme="dark"] .engineer-task-row {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(2, 11, 24, 0.55);
+}
+
+[data-theme="dark"] .engineer-card {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.82);
+}
+
+.category-entry-row {
+  display: flex;
+  gap: 8px;
+}
+
+.category-entry-row input {
+  flex: 1;
+}
+
+.company-category-chip {
+  border: 0;
+  cursor: pointer;
 }
 
 .locked-field {
@@ -4326,6 +4540,7 @@ dl dt {
 
   /* Make stat cards very compact for mobile horizontal layout */
   .dashboard-health span,
+  .dashboard-health-link,
   .stat,
   .companies-hero-stat,
   .company-health-card,
@@ -4346,6 +4561,7 @@ dl dt {
   }
 
   .dashboard-health span strong,
+  .dashboard-health-link strong,
   .stat strong,
   .companies-hero-stat strong,
   .company-health-card strong,

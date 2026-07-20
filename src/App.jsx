@@ -262,7 +262,7 @@ function saveStoredUser(nextUser) {
 
 function normalizeView(nextView, user) {
   const allowedViews = user?.role === "admin"
-    ? new Set(["dashboard", "companies", "assets", "appeals", "service", "settings"])
+    ? new Set(["dashboard", "companies", "assets", "engineers", "appeals", "service", "settings"])
     : new Set(["dashboard", "assets", "appeals", "service", "settings", "terms"]);
   return allowedViews.has(nextView) ? nextView : "dashboard";
 }
@@ -437,13 +437,24 @@ function clientCategories(client, fallbackCategories = []) {
 function normalizeBranches(branches, fallbackName = "Main Branch") {
   const source = Array.isArray(branches) ? branches : [];
   const normalized = source
-    .map((branch) => ({
-      id: branch?.id || uid("br"),
-      name: String(branch?.name || "").trim(),
-      address: String(branch?.address || "").trim()
-    }))
+    .map((branch) => {
+      const departments = [...new Set(
+        (branch?.departmentsText !== undefined
+          ? String(branch.departmentsText || "").split(",")
+          : (Array.isArray(branch?.departments) ? branch.departments : []))
+          .map((department) => String(department || "").trim())
+          .filter(Boolean)
+      )];
+      return {
+        id: branch?.id || uid("br"),
+        name: String(branch?.name || "").trim(),
+        address: String(branch?.address || "").trim(),
+        departments,
+        departmentsText: departments.join(", ")
+      };
+    })
     .filter((branch) => branch.name);
-  return normalized.length > 0 ? normalized : [{ id: "branch-default", name: fallbackName, address: "" }];
+  return normalized.length > 0 ? normalized : [{ id: "branch-default", name: fallbackName, address: "", departments: [], departmentsText: "" }];
 }
 
 function clientBranches(client) {
@@ -910,6 +921,7 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
         ["dashboard", "Dashboard", Archive],
         ["companies", "Companies", Building2],
         ["assets", "Assets", FileText],
+        ["engineers", "Engineers", UserRound],
         ["appeals", "Appeals", MessageSquare],
         ["service", "Service", History],
         ["settings", "Settings", ShieldCheck]
@@ -977,6 +989,17 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
             </div>
           </div>
           <button
+            className="collapse-toggle top-collapse-toggle"
+            type="button"
+            onClick={() => setSidebarCollapsed((current) => !current)}
+            aria-label={shellCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={shellCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!shellCollapsed}
+          >
+            <Menu size={20} />
+            <span>{shellCollapsed ? "Expand" : "Collapse"}</span>
+          </button>
+          <button
             className="mobile-menu-toggle"
             type="button"
             onClick={() => setMobileNavOpen((current) => !current)}
@@ -999,17 +1022,6 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
         </nav>
         <div className="sidebar-actions">
           <div className="sidebar-section-label">Preferences</div>
-          <button
-            className="collapse-toggle"
-            type="button"
-            onClick={() => isCompactViewport ? setMobileNavOpen((current) => !current) : setSidebarCollapsed((current) => !current)}
-            aria-label={shellCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={shellCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={isCompactViewport ? mobileNavOpen : !shellCollapsed}
-          >
-            {(isCompactViewport ? !mobileNavOpen : shellCollapsed) ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-            <span>{isCompactViewport ? (mobileNavOpen ? "Collapse" : "Expand") : (shellCollapsed ? "Expand" : "Collapse")}</span>
-          </button>
           {showInstallButton && (
             <button
               className="install-button"
@@ -1190,7 +1202,7 @@ function CompanyForm({ onCreate, className = "" }) {
     email: "",
     phone: "",
     address: "",
-    branches: [{ id: uid("br"), name: "Main Branch", address: "" }],
+    branches: [{ id: uid("br"), name: "Main Branch", address: "", departments: [], departmentsText: "" }],
     logoUrl: "",
     assetCategoriesText: "Laptop, Printer",
     amcStartDate: today(),
@@ -1204,7 +1216,7 @@ function CompanyForm({ onCreate, className = "" }) {
     setForm((current) => {
       const sanitizedValue = field === "phone" ? normalizePhone(value) : field === "address" ? value.slice(0, 150) : value;
       const next = { ...current, [field]: sanitizedValue };
-      if (field === "email" && !current.loginEmail) next.loginEmail = value;
+      if (field === "email") next.loginEmail = value;
       if (field === "amcStartDate" || field === "amcTerm") {
         const startDate = field === "amcStartDate" ? sanitizedValue : current.amcStartDate;
         const term = field === "amcTerm" ? sanitizedValue : current.amcTerm;
@@ -1226,7 +1238,7 @@ function CompanyForm({ onCreate, className = "" }) {
   function addBranch() {
     setForm((current) => ({
       ...current,
-      branches: [...current.branches, { id: uid("br"), name: "", address: "" }]
+      branches: [...current.branches, { id: uid("br"), name: "", address: "", departments: [], departmentsText: "" }]
     }));
   }
 
@@ -1268,7 +1280,7 @@ function CompanyForm({ onCreate, className = "" }) {
       email: "",
       phone: "",
       address: "",
-      branches: [{ id: uid("br"), name: "Main Branch", address: "" }],
+      branches: [{ id: uid("br"), name: "Main Branch", address: "", departments: [], departmentsText: "" }],
       logoUrl: "",
       assetCategoriesText: "Laptop, Printer",
       amcStartDate: today(),
@@ -1299,6 +1311,18 @@ function CompanyForm({ onCreate, className = "" }) {
     const nextStep = Math.min(step + 1, steps.length - 1);
     setMaxUnlockedStep((current) => Math.max(current, nextStep));
     setStep(nextStep);
+  }
+
+  function addCompanyCategory() {
+    const category = categoryDraft.trim();
+    const categories = form.assetCategoriesText.split(",").map((item) => item.trim()).filter(Boolean);
+    if (!category || categories.some((item) => item.toLowerCase() === category.toLowerCase())) return;
+    update("assetCategoriesText", [...categories, category].join(", "));
+    setCategoryDraft("");
+  }
+
+  function removeCompanyCategory(category) {
+    update("assetCategoriesText", form.assetCategoriesText.split(",").map((item) => item.trim()).filter((item) => item && item !== category).join(", "));
   }
 
   return (
@@ -1334,8 +1358,8 @@ function CompanyForm({ onCreate, className = "" }) {
             <input placeholder="Company name" value={form.companyName} onChange={(event) => update("companyName", event.target.value)} required />
           </label>
           <label>
-            Contact person
-            <input placeholder="Contact person" value={form.contactPerson} onChange={(event) => update("contactPerson", event.target.value)} required />
+            HR Name
+            <input placeholder="HR name" value={form.contactPerson} onChange={(event) => update("contactPerson", event.target.value)} required />
           </label>
           <label>
             Client email
@@ -1429,8 +1453,8 @@ function CompanyForm({ onCreate, className = "" }) {
           <h3>Client login</h3>
           <p>Create the login ID and password this company will use in the Client portal.</p>
           <label>
-            Login ID
-            <input type="email" placeholder="client@company.com" value={form.loginEmail} onChange={(event) => update("loginEmail", event.target.value)} required />
+            Login email (same as company email)
+            <input type="email" value={form.email} readOnly required />
           </label>
           <label>
             Password
@@ -1456,12 +1480,48 @@ function CompanyForm({ onCreate, className = "" }) {
   );
 }
 
-function EngineerModal({ engineers, isOpen, onClose, onCreate, onUpdateStatus }) {
+function EngineerAvatar({ engineer, size = 44 }) {
+  const initials = String(engineer?.name || "Engineer")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "EN";
+  const hue = [...String(engineer?.id || engineer?.name || "engineer")]
+    .reduce((total, character) => total + character.charCodeAt(0), 0) % 360;
+  return (
+    <div className="engineer-avatar" style={{ width: size, height: size, flexBasis: size, background: `hsl(${hue} 65% 90%)`, color: `hsl(${hue} 55% 30%)` }} aria-label={`${engineer?.name || "Engineer"} avatar`}>
+      {engineer?.photoUrl
+        ? <ImageWithFallback src={resolveMediaUrl(engineer.photoUrl)} alt={engineer.name} fallback={<strong>{initials}</strong>} />
+        : <strong>{initials}</strong>}
+    </div>
+  );
+}
+
+function EngineerModal({ isOpen, onClose, onSave, engineer }) {
   const [form, setForm] = useState({
     name: "",
+    email: "",
     phone: "",
+    photoUrl: "",
+    specialization: "",
     status: "active"
   });
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setForm(engineer ? {
+      name: engineer.name || "",
+      email: engineer.email || "",
+      phone: engineer.phone || "",
+      photoUrl: engineer.photoUrl || "",
+      specialization: engineer.specialization || "",
+      status: engineer.status || "active"
+    } : { name: "", email: "", phone: "", photoUrl: "", specialization: "", status: "active" });
+    setUploadError("");
+  }, [isOpen, engineer]);
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: field === "phone" ? normalizePhone(value) : value }));
@@ -1469,9 +1529,25 @@ function EngineerModal({ engineers, isOpen, onClose, onCreate, onUpdateStatus })
 
   function submit(event) {
     event.preventDefault();
-    if (!form.name.trim()) return;
-    onCreate(form);
-    setForm({ name: "", phone: "", status: "active" });
+    if (!form.name.trim() || !form.phone.trim() || !isValidEmail(form.email)) return;
+    onSave(form, engineer?.id || null);
+  }
+
+  async function uploadEngineerPhoto(event) {
+    const target = event.target;
+    const file = target?.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    setUploadError("");
+    try {
+      const result = await uploadFile(file);
+      update("photoUrl", result.url);
+    } catch (error) {
+      setUploadError(uploadErrorMessage(error));
+    } finally {
+      setUploadingPhoto(false);
+      if (target) target.value = "";
+    }
   }
 
   return (
@@ -1480,38 +1556,86 @@ function EngineerModal({ engineers, isOpen, onClose, onCreate, onUpdateStatus })
         <div className="panel-head">
           <div>
             <span className="eyebrow">Admin setup</span>
-            <h2 id="engineer-modal-title">Add engineer</h2>
+            <h2 id="engineer-modal-title">{engineer ? "Edit engineer" : "Add engineer"}</h2>
           </div>
           <button className="secondary modal-close" type="button" onClick={onClose}>Close</button>
         </div>
         <form className="form-grid engineer-form-grid" onSubmit={submit}>
-          <input placeholder="Engineer name" value={form.name} onChange={(event) => update("name", event.target.value)} required />
-          <input type="email" placeholder="Engineer email" value={form.email} onChange={(event) => update("email", event.target.value)} />
-          <input inputMode="numeric" placeholder="Phone" value={form.phone} onChange={(event) => update("phone", event.target.value)} maxLength={10} />
-          <input placeholder="Specialization" value={form.specialization} onChange={(event) => update("specialization", event.target.value)} />
-          <select value={form.status} onChange={(event) => update("status", event.target.value)}>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-          <button className="primary" type="submit"><UserRound size={16} /> Save engineer</button>
+          <label>Name *<input placeholder="Engineer name" value={form.name} onChange={(event) => update("name", event.target.value)} required /></label>
+          <label>Contact number *<input inputMode="numeric" placeholder="10-digit contact number" value={form.phone} onChange={(event) => update("phone", event.target.value)} maxLength={10} required /></label>
+          <label>Email *<input type="email" placeholder="engineer@example.com" value={form.email} onChange={(event) => update("email", event.target.value)} required /></label>
+          <label>Specialization<input placeholder="Networking, CCTV, Hardware" value={form.specialization} onChange={(event) => update("specialization", event.target.value)} /></label>
+          <label className="engineer-photo-field">Photo (optional)
+            <span className="engineer-photo-control">
+              <EngineerAvatar engineer={{ ...form, id: form.email || form.name }} size={56} />
+              <input type="file" accept=".jpg,.jpeg,.png,.webp" onChange={uploadEngineerPhoto} disabled={uploadingPhoto} />
+            </span>
+          </label>
+          <label>Status<select value={form.status} onChange={(event) => update("status", event.target.value)}>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select></label>
+          {uploadingPhoto && <small className="upload-note">Uploading photo...</small>}
+          {uploadError && <small className="upload-error">{uploadError}</small>}
+          <button className="primary" type="submit"><UserRound size={16} /> {engineer ? "Update engineer" : "Save engineer"}</button>
         </form>
-        <div className="engineer-list">
-          <h3>Existing engineers</h3>
-          {engineers.length > 0 ? engineers.map((engineer) => (
-            <div key={engineer.id} className="engineer-row">
-              <div>
+      </div>
+    </div>
+  );
+}
+
+function EngineersPage({ data, onAdd, onEdit, onUpdateStatus }) {
+  const engineers = data.engineers || [];
+  const [expandedEngineerId, setExpandedEngineerId] = useState("");
+  return (
+    <section className="page-grid engineers-page">
+      <div className="panel">
+        <div className="panel-head">
+          <div>
+            <span className="eyebrow">Service team</span>
+            <h2>Engineers</h2>
+            <p>Manage the engineers who can be assigned to issues and service work.</p>
+          </div>
+          <button className="primary" type="button" onClick={onAdd}><Plus size={16} /> Add Engineer</button>
+        </div>
+        <div className="engineer-directory">
+          {engineers.length > 0 ? engineers.map((engineer) => {
+            const tasks = (data.appeals || []).filter((appeal) => appeal.assignedEngineerId === engineer.id);
+            const isExpanded = expandedEngineerId === engineer.id;
+            return (
+            <article key={engineer.id} className="engineer-card">
+              <EngineerAvatar engineer={engineer} size={58} />
+              <div className="engineer-card-copy">
                 <strong>{engineer.name}</strong>
-                <small>{engineer.phone || "Phone not added yet"}</small>
+                <a href={`mailto:${engineer.email}`}>{engineer.email || "Email not added"}</a>
+                <small>{engineer.phone || "Contact not added"}{engineer.specialization ? ` · ${engineer.specialization}` : ""}</small>
               </div>
-              <select value={engineer.status} onChange={(event) => onUpdateStatus(engineer.id, event.target.value)}>
+              <div className="engineer-card-actions">
+              <button className="secondary" type="button" onClick={() => onEdit(engineer)}>Edit</button>
+              <select value={engineer.status || "active"} onChange={(event) => onUpdateStatus(engineer.id, event.target.value)} aria-label={`Status for ${engineer.name}`}>
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
-            </div>
-          )) : <div className="empty-inline">No engineers added yet.</div>}
+              <button className="secondary" type="button" onClick={() => setExpandedEngineerId(isExpanded ? "" : engineer.id)}>{isExpanded ? "Hide tasks" : `Tasks (${tasks.length})`}</button>
+              </div>
+              {isExpanded && <div className="engineer-task-box">
+                <h3>{engineer.name}&apos;s assigned tasks</h3>
+                {tasks.length > 0 ? tasks.map((task) => {
+                  const company = data.clients.find((item) => item.id === task.clientId);
+                  const asset = data.assets.find((item) => item.id === task.assetId);
+                  return <div className="engineer-task-row" key={task.id}>
+                    <div><strong>{task.title}</strong><small>{company?.companyName || "Unknown company"} · {asset?.name || "Unknown asset"}</small></div>
+                    <div className="engineer-task-meta"><span className={statusClass(task.priority)}>{task.priority}</span><span className={statusClass(task.status)}>{formatStatusLabel(task.status)}</span><small>{formatTimestamp(task.updatedAt)}</small></div>
+                  </div>;
+                }) : <p className="muted-copy">No tasks are currently assigned to this engineer.</p>}
+              </div>}
+            </article>
+          );}) : (
+            <div className="empty-state compact-empty-state"><UserRound size={30} /><h2>No engineers yet</h2><p>Add your first engineer to start assigning service work.</p></div>
+          )}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -1641,7 +1765,7 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
   function updateBranch(index, field, value) {
     setForm((current) => ({
       ...current,
-      branches: normalizeBranches(current.branches).map((branch, branchIndex) =>
+      branches: current.branches.map((branch, branchIndex) =>
         branchIndex === index ? { ...branch, [field]: value } : branch
       )
     }));
@@ -1650,14 +1774,14 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
   function addBranch() {
     setForm((current) => ({
       ...current,
-      branches: [...normalizeBranches(current.branches), { id: uid("br"), name: "", address: "" }]
+      branches: [...current.branches, { id: uid("br"), name: "", address: "", departments: [], departmentsText: "" }]
     }));
   }
 
   function removeBranch(index) {
     setForm((current) => ({
       ...current,
-      branches: normalizeBranches(normalizeBranches(current.branches).filter((_, branchIndex) => branchIndex !== index))
+      branches: current.branches.filter((_, branchIndex) => branchIndex !== index)
     }));
   }
 
@@ -1721,8 +1845,8 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
               <input placeholder="Company name" value={form.companyName} onChange={(event) => update("companyName", event.target.value)} required />
             </label>
             <label>
-              Contact person
-              <input placeholder="Contact person" value={form.contactPerson} onChange={(event) => update("contactPerson", event.target.value)} required />
+              HR Name
+              <input placeholder="HR name" value={form.contactPerson} onChange={(event) => update("contactPerson", event.target.value)} required />
             </label>
           </div>
           <div className="field-grid">
@@ -1741,7 +1865,7 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
           </div>
           <div className="branch-editor-list company-editor-branches">
             <strong>Branches</strong>
-            {normalizeBranches(form.branches).map((branch, index) => (
+            {form.branches.map((branch, index) => (
               <div className="branch-editor-row" key={branch.id}>
                 <label>
                   Branch name *
@@ -1755,7 +1879,7 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
                   Departments (comma-separated)
                   <input placeholder="HR, Sales, IT" value={branch.departmentsText || ""} onChange={(event) => updateBranch(index, "departmentsText", event.target.value)} />
                 </label>
-                <button className="secondary" type="button" onClick={() => removeBranch(index)} disabled={normalizeBranches(form.branches).length === 1}>Remove</button>
+                <button className="secondary" type="button" onClick={() => removeBranch(index)} disabled={form.branches.length === 1}>Remove</button>
               </div>
             ))}
             <button className="secondary" type="button" onClick={addBranch}><Plus size={16} /> Add branch</button>
@@ -1845,7 +1969,7 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
 }
 
 function CompaniesPage({ user, data, setData, setDataState, notify }) {
-  const [selectedId, setSelectedId] = useState(data.clients[0]?.id);
+  const [selectedId, setSelectedId] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showCompanyModal, setShowCompanyModal] = useState(false);
@@ -1875,13 +1999,12 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
   }, [companyDirectory, search, statusFilter]);
 
   useEffect(() => {
-    if (!filteredClients.length) return;
-    if (!filteredClients.some((client) => client.id === selectedId)) {
-      setSelectedId(filteredClients[0].id);
+    if (selectedId && !filteredClients.some((client) => client.id === selectedId)) {
+      setSelectedId("");
     }
   }, [filteredClients, selectedId]);
 
-  const selected = companyDirectory.find((client) => client.id === selectedId) || filteredClients[0] || companyDirectory[0];
+  const selected = companyDirectory.find((client) => client.id === selectedId) || null;
   const activeCompanies = companyDirectory.filter((client) => client.status === "active").length;
   const totalAssets = companyDirectory.reduce((sum, client) => sum + client.assetCount, 0);
 
@@ -1927,7 +2050,7 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
       clearPendingState();
       setPendingSync(false);
       setApiStatus("connected");
-      setSelectedId(result.company.id);
+      setSelectedId("");
       const welcomeStatus = result.email?.welcome;
       if (welcomeStatus?.failed > 0 || welcomeStatus?.skipped) {
         notify(`Added ${result.company.companyName}, but email was not sent. Check SMTP settings.`, "warning");
@@ -1970,7 +2093,7 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
   function deleteCompany(clientId) {
     setData((current) => {
       const remaining = current.clients.filter((client) => client.id !== clientId);
-      setSelectedId(remaining[0]?.id);
+      setSelectedId("");
       const deletedClient = current.clients.find((client) => client.id === clientId);
       return withNotification(
         { ...current, clients: remaining, users: current.users.filter((item) => item.clientId !== clientId) },
@@ -2092,7 +2215,10 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
                       <small>{selected.contactPerson}</small>
                     </span>
                   </div>
-                  <span className={statusClass(selected.status)}>{selected.status}</span>
+                  <div className="workspace-panel-actions">
+                    <span className={statusClass(selected.status)}>{selected.status}</span>
+                    <button className="secondary workspace-close-button" type="button" onClick={() => setSelectedId("")}>Close</button>
+                  </div>
                 </div>
                 <div className="company-overview-grid">
                   <div className="company-overview-card">
@@ -2122,7 +2248,7 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
             <div className="panel empty-state">
               <Building2 size={36} />
               <h2>No company selected</h2>
-              <p>Create a company or adjust the search filters to continue.</p>
+              <p>Choose a company from the directory to open its details.</p>
             </div>
           )}
         </div>
@@ -2148,7 +2274,7 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
   );
 }
 
-function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand, onOpenAsset, onOpenAppeal, onOpenService }) {
+function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand, onOpenAsset, onOpenAppeal, onOpenService, setView }) {
   const scopedServiceRecords = getScopedServiceRecords(data.serviceRecords, scopedAssets);
   const serviceWindowEnd = new Date();
   serviceWindowEnd.setDate(serviceWindowEnd.getDate() + 30);
@@ -2171,10 +2297,26 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand, onOpe
             <p>Monitor company coverage, asset condition, service due dates, and client issue status from one focused dashboard.</p>
           </div>
           <div className="dashboard-health">
-            <span><strong>{data.clients.length}</strong><small className="dashboard-health-label">Companies</small></span>
-            <span><strong>{scopedAssets.length}</strong><small className="dashboard-health-label">Assets</small></span>
-            <span><strong>{openAppeals.length}</strong><small className="dashboard-health-label">Open issues</small></span>
-            <span><strong>{dueServices.length}</strong><small className="dashboard-health-label">Service due</small></span>
+            {user.role === "admin" ? (
+              <button className="dashboard-health-link" type="button" onClick={() => setView?.("companies")}>
+                <strong>{data.clients.length}</strong>
+                <small className="dashboard-health-label">Companies</small>
+              </button>
+            ) : (
+              <span><strong>{data.clients.length}</strong><small className="dashboard-health-label">Companies</small></span>
+            )}
+            <button className="dashboard-health-link" type="button" onClick={() => setView?.("assets")}>
+              <strong>{scopedAssets.length}</strong>
+              <small className="dashboard-health-label">Assets</small>
+            </button>
+            <button className="dashboard-health-link" type="button" onClick={() => setView?.("appeals")}>
+              <strong>{openAppeals.length}</strong>
+              <small className="dashboard-health-label">Open issues</small>
+            </button>
+            <button className="dashboard-health-link" type="button" onClick={() => setView?.("service")}>
+              <strong>{dueServices.length}</strong>
+              <small className="dashboard-health-label">Service due</small>
+            </button>
           </div>
         </div>
 
@@ -2220,16 +2362,28 @@ function Dashboard({ user, data, scopedAssets, scopedAppeals, clientBrand, onOpe
         <div className="dashboard-lower-grid">
           <CollapsiblePanel eyebrow="Company coverage" title="Client asset distribution" badge={<span className="badge active">{data.clients.length}</span>}>
             <div className="company-list compact-company-list">
-              {data.clients.map((client) => (
-                <div className="company-row" key={client.id}>
-                  <CompanyLogo client={client} />
-                  <span className="company-row-content">
-                    <strong>{client.companyName}</strong>
-                    <small>{data.assets.filter((asset) => asset.clientId === client.id).length} assets / {client.contactPerson}</small>
-                  </span>
-                  <span className={statusClass(client.status)}>{client.status}</span>
-                </div>
-              ))}
+              {data.clients.map((client) => {
+                const isClickable = user.role === "admin";
+                const RowComponent = isClickable ? "button" : "div";
+                const rowProps = isClickable
+                  ? {
+                      className: "company-row clickable-list-item",
+                      type: "button",
+                      onClick: () => setView?.("companies")
+                    }
+                  : { className: "company-row" };
+
+                return (
+                  <RowComponent key={client.id} {...rowProps}>
+                    <CompanyLogo client={client} />
+                    <span className="company-row-content" style={isClickable ? { textAlign: "left", flex: 1 } : {}}>
+                      <strong>{client.companyName}</strong>
+                      <small>{data.assets.filter((asset) => asset.clientId === client.id).length} assets / {client.contactPerson}</small>
+                    </span>
+                    <span className={statusClass(client.status)}>{client.status}</span>
+                  </RowComponent>
+                );
+              })}
             </div>
           </CollapsiblePanel>
 
@@ -2563,11 +2717,11 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
             const branches = clientBranches(client);
             const selectedBranch = branches.find((b) => b.id === form.branchId);
             const depts = selectedBranch?.departments || [];
-            if (depts.length === 0) return null;
             return (
               <label>
                 Department
-                <select value={form.department} onChange={(event) => update("department", event.target.value)}>
+                <select value={form.department} onChange={(event) => update("department", event.target.value)} disabled={depts.length === 0}>
+                  {depts.length === 0 && <option value="">No departments configured for this branch</option>}
                   {depts.map((dept) => (
                     <option key={dept} value={dept}>{dept}</option>
                   ))}
@@ -2580,7 +2734,7 @@ function AssetForm({ clients, categories, existingAssets, onCreate, lockedClient
             <input placeholder="Office, department, site, or room (optional)" value={form.location} onChange={(event) => update("location", event.target.value)} />
           </label>
           <label>
-            User name
+            Assigned User Name
             <input placeholder="Assigned user name (optional)" value={form.userName} onChange={(event) => update("userName", event.target.value)} />
           </label>
         </div>
@@ -2785,9 +2939,9 @@ function AssetEditor({ asset, clients, categories, onUpdate, onDelete, canDelete
         const branches = clientBranches(client);
         const selectedBranch = branches.find((b) => b.id === form.branchId);
         const depts = selectedBranch?.departments || [];
-        if (depts.length === 0) return null;
         return (
-          <select value={form.department} onChange={(event) => update("department", event.target.value)}>
+          <select value={form.department} onChange={(event) => update("department", event.target.value)} disabled={depts.length === 0} aria-label="Department">
+            {depts.length === 0 && <option value="">No departments configured for this branch</option>}
             {depts.map((dept) => (
               <option key={dept} value={dept}>{dept}</option>
             ))}
@@ -3541,11 +3695,12 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
   const [query, setQuery] = useState("");
   const [filterClientId, setFilterClientId] = useState(user.role === "admin" ? (data.clients[0]?.id || "") : user.clientId);
   const [filterCategory, setFilterCategory] = useState("");
-  const [selectedId, setSelectedId] = useState(scopedAssets[0]?.id);
+  const [selectedId, setSelectedId] = useState(initialSelectedId || "");
   const [assetView, setAssetView] = useState("details");
   const [showAssetModal, setShowAssetModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkFormKey, setBulkFormKey] = useState(0);
+  const handledInitialSelection = useRef("");
 
   function bulkAddAssets(newAssets) {
     setData((current) => {
@@ -3575,16 +3730,14 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
     setBulkFormKey((current) => current + 1);
     notify(`Successfully added ${newAssets.length} assets.`);
 
-    if (newAssets.length > 0) {
-      setSelectedId(newAssets[0].id);
-      setAssetView("details");
-    }
+    setSelectedId("");
+    setAssetView("details");
   }
   const assetCategories = data.assetCategories || [];
   const editableClients = user.role === "admin" ? data.clients : data.clients.filter((client) => client.id === user.clientId);
   const selectedClient = editableClients.find((client) => client.id === filterClientId) || editableClients[0];
   const selectedCompanyCategories = clientCategories(selectedClient, assetCategories);
-  const selected = scopedAssets.find((asset) => asset.id === selectedId) || scopedAssets.find((asset) => asset.clientId === selectedClient?.id);
+  const selected = scopedAssets.find((asset) => asset.id === selectedId) || null;
   const filtered = scopedAssets.filter((asset) =>
     (!filterClientId || asset.clientId === filterClientId) &&
     (!filterCategory || asset.category === filterCategory) &&
@@ -3609,13 +3762,15 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
   }, [filterCategory, selectedCompanyCategories]);
 
   useEffect(() => {
-    if (filtered.length > 0 && !filtered.some((asset) => asset.id === selectedId)) {
-      setSelectedId(filtered[0].id);
+    if (selectedId && !filtered.some((asset) => asset.id === selectedId)) {
+      setSelectedId("");
+      setAssetView("details");
     }
   }, [filtered, selectedId]);
 
   useEffect(() => {
-    if (initialSelectedId && scopedAssets.some((asset) => asset.id === initialSelectedId)) {
+    if (initialSelectedId && handledInitialSelection.current !== initialSelectedId && scopedAssets.some((asset) => asset.id === initialSelectedId)) {
+      handledInitialSelection.current = initialSelectedId;
       setSelectedId(initialSelectedId);
       setAssetView("details");
     }
@@ -3656,7 +3811,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
         entityId: asset.id
       }
     ));
-    setSelectedId(asset.id);
+    setSelectedId("");
     setAssetView("details");
     setShowAssetModal(false);
     notify(`Added ${asset.name}.`);
@@ -3739,7 +3894,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
     setData((current) => {
       const remainingAssets = current.assets.filter((asset) => asset.id !== assetId);
       const deletedAppealIds = current.appeals.filter((appeal) => appeal.assetId === assetId).map((appeal) => appeal.id);
-      setSelectedId(remainingAssets[0]?.id);
+      setSelectedId("");
       const deletedAsset = current.assets.find((asset) => asset.id === assetId);
       return withNotification({
         ...current,
@@ -3913,6 +4068,8 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
           <select value={filterClientId} onChange={(event) => {
             setFilterClientId(event.target.value);
             setFilterCategory("");
+            setSelectedId("");
+            setAssetView("details");
           }}>
             {editableClients.map((client) => <option key={client.id} value={client.id}>{client.companyName}</option>)}
           </select>
@@ -3938,7 +4095,10 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
                     asset={asset}
                     client={client}
                     selected={selected?.id === asset.id}
-                    onSelect={setSelectedId}
+                    onSelect={(assetId) => {
+                      setSelectedId(assetId);
+                      setAssetView("details");
+                    }}
                     onEdit={user.role === "admin" ? () => {
                       setSelectedId(asset.id);
                       setAssetView("edit");
@@ -3954,19 +4114,24 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
         <div className="panel asset-subnav">
           <div>
             <span className="eyebrow">Asset workspace</span>
-            <h2>{assetView === "add" ? "Add asset" : assetView === "edit" ? "Edit asset" : "Asset details"}</h2>
+            <h2>{!selected ? "Select an asset" : assetView === "edit" ? "Edit asset" : "Asset details"}</h2>
           </div>
-          <div className="segmented-control">
-            <button className={assetView === "details" ? "active" : ""} type="button" onClick={() => setAssetView("details")}>Details</button>
-            <button className={assetView === "edit" ? "active" : ""} type="button" onClick={() => setAssetView("edit")} disabled={!selected}>Edit asset</button>
+          <div className="workspace-panel-actions">
+            {selected && (
+              <div className="segmented-control">
+                <button className={assetView === "details" ? "active" : ""} type="button" onClick={() => setAssetView("details")}>Details</button>
+                <button className={assetView === "edit" ? "active" : ""} type="button" onClick={() => setAssetView("edit")}>Edit asset</button>
+              </div>
+            )}
+            {selected && <button className="secondary workspace-close-button" type="button" onClick={() => { setSelectedId(""); setAssetView("details"); }}>Close</button>}
+            {user.role === "admin" && (
+              <button className="secondary" type="button" onClick={onAddEngineer}>
+                <Plus size={16} /> Add engineer
+              </button>
+            )}
           </div>
-          {user.role === "admin" && (
-            <button className="secondary" type="button" onClick={onAddEngineer}>
-              <Plus size={16} /> Add engineer
-            </button>
-          )}
         </div>
-        {selected || user.role === "admin" ? (
+        {selected ? (
           <>
             {assetView === "details" && selected && (
               <>
@@ -4047,18 +4212,8 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
         ) : (
           <div className="panel empty-state asset-empty-state">
             <Archive size={28} />
-            <h2>{user.role === "admin" ? "No assets yet" : "No assets available"}</h2>
-            <p>{user.role === "admin" ? "Create the first asset to start tracking lifecycle, service, and media records." : "No assets are available for this account right now."}</p>
-            <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
-              <button className="secondary" type="button" onClick={() => setShowBulkModal(true)}>
-                <Plus size={16} /> Bulk Add Assets
-              </button>
-              {user.role === "admin" && (
-                <button className="primary" type="button" onClick={openAssetForm}>
-                  <Plus size={16} /> Add asset
-                </button>
-              )}
-            </div>
+            <h2>No asset selected</h2>
+            <p>Choose an asset from the list to open its details.</p>
           </div>
         )}
         <div className={`modal-backdrop${showAssetModal ? "" : " modal-backdrop-hidden"}`} role="presentation" aria-hidden={!showAssetModal}>
@@ -4105,12 +4260,13 @@ function HistoryPanel({ title, items }) {
   );
 }
 
-function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify, initialSelectedId }) {
+function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify, onAssignEngineer, initialSelectedId }) {
   const [selectedId, setSelectedId] = useState(initialSelectedId || scopedAppeals[0]?.id);
   const [newIssue, setNewIssue] = useState({ assetId: scopedAssets[0]?.id || "", title: "", description: "", priority: "medium" });
   const [newIssueFile, setNewIssueFile] = useState(null);
   const [uploadingAppeal, setUploadingAppeal] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [assigningEngineer, setAssigningEngineer] = useState(false);
   const selected = scopedAppeals.find((appeal) => appeal.id === selectedId) || scopedAppeals[0];
   const selectedMessages = selected ? data.appealMessages.filter((message) => message.appealId === selected.id) : [];
   const selectedAttachments = selectedMessages.flatMap((message) => message.attachments || []);
@@ -4270,6 +4426,16 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify,
     }
   }
 
+  async function assignEngineer(engineerId) {
+    if (!selected || !onAssignEngineer) return;
+    setAssigningEngineer(true);
+    try {
+      await onAssignEngineer(selected.id, engineerId || null);
+    } finally {
+      setAssigningEngineer(false);
+    }
+  }
+
   const assignmentLocked = ["resolved", "approved", "closed"].includes(selected?.status);
 
   return (
@@ -4340,6 +4506,7 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify,
               <span><strong>Updated</strong>{formatTimestamp(selected.updatedAt)}</span>
               <span><strong>Assigned engineer</strong>{selectedEngineer?.name || "Not assigned"}</span>
               <span><strong>Engineer contact</strong>{selectedEngineer?.email || selectedEngineer?.phone || "Not shared yet"}</span>
+              {selected.assignedAt && <span><strong>Assigned on</strong>{formatTimestamp(selected.assignedAt)}</span>}
             </div>
             {user.role === "admin" && (
               <label className="engineer-assign">
@@ -4352,10 +4519,14 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify,
                 ) : (
                   <select
                     value={selected.assignedEngineerId || ""}
-                    onChange={(event) => updateSelectedAppeal({ assignedEngineerId: event.target.value || null }, event.target.value ? "Engineer assigned to appeal." : "Engineer assignment cleared.")}
+                    disabled={assigningEngineer}
+                    onChange={(event) => assignEngineer(event.target.value)}
                   >
-                    <option value="">Unassigned</option>
-                    {data.engineers.map((engineer) => (
+                    <option value="">{assigningEngineer ? "Saving assignment..." : "Unassigned"}</option>
+                    {selectedEngineer?.status === "inactive" && (
+                      <option value={selectedEngineer.id} disabled>{selectedEngineer.name} - inactive</option>
+                    )}
+                    {data.engineers.filter((engineer) => engineer.status !== "inactive").map((engineer) => (
                       <option key={engineer.id} value={engineer.id}>{engineer.name} {engineer.specialization ? `- ${engineer.specialization}` : ""}</option>
                     ))}
                   </select>
@@ -4895,7 +5066,7 @@ function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveC
   }
 
   async function submitAdminAlertTest() {
-    setAdminEmailStatus({ status: "saving", message: "Sending test email..." });
+    setAdminEmailStatus({ status: "saving", message: "Sending AMC preview email..." });
     const sent = await onSendAdminAlertTest(adminAlertEmail);
     setAdminEmailStatus(sent
       ? { status: "success", message: `Test email sent to ${adminAlertEmail.trim()}.` }
@@ -4934,7 +5105,7 @@ function AdminSettingsPage({ data, notify, onUpdateClientCredentials, onResolveC
           <div className="field-grid">
             <button className="primary inline-action" type="submit"><Save size={16} /> Save alert email</button>
             <button className="secondary inline-action" type="button" disabled={adminEmailStatus?.status === "saving"} onClick={submitAdminAlertTest}>
-              <Mail size={16} /> {adminEmailStatus?.status === "saving" ? "Sending..." : "Send test email"}
+              <Mail size={16} /> {adminEmailStatus?.status === "saving" ? "Sending..." : "Send AMC preview email"}
             </button>
           </div>
           {adminEmailStatus?.message && <small className={`settings-save-status ${adminEmailStatus.status}`}>{adminEmailStatus.message}</small>}
@@ -5071,6 +5242,7 @@ export default function App() {
   const [pendingSync, setPendingSync] = useState(Boolean(loadPendingState()));
   const [notice, setNotice] = useState(null);
   const [showEngineerModal, setShowEngineerModal] = useState(false);
+  const [editingEngineer, setEditingEngineer] = useState(null);
   const [theme, setTheme] = useState(loadStoredTheme);
   const [routeSelection, setRouteSelection] = useState({ assetId: "", appealId: "", serviceId: "" });
   const seenNotificationIds = useRef({ initialized: false, ids: new Set() });
@@ -5242,41 +5414,6 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  useEffect(() => {
-    if (!user || user.role !== "admin") return;
-    const todayDate = new Date(`${today()}T00:00:00`);
-    const expiringClients = (data.clients || []).filter((client) => {
-      if (!client.amcEndDate || client.amcRenewalNoticeSentAt) return false;
-      const endDate = new Date(`${client.amcEndDate}T00:00:00`);
-      if (Number.isNaN(endDate.getTime())) return false;
-      const daysLeft = Math.ceil((endDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
-      return daysLeft >= 0 && daysLeft <= 30;
-    });
-    if (expiringClients.length === 0) return;
-    setData((current) => {
-      let nextState = current;
-      for (const client of expiringClients) {
-        nextState = withNotification({
-          ...nextState,
-          clients: nextState.clients.map((item) =>
-            item.id === client.id ? { ...item, amcRenewalNoticeSentAt: new Date().toISOString() } : item
-          )
-        }, {
-          type: "amc_expiring",
-          title: "AMC renewal due",
-          message: `${client.companyName} AMC ends on ${client.amcEndDate}. Please renew the contract.`,
-          clientId: client.id,
-          actorRole: "system",
-          actorName: "System",
-          entityType: "amc",
-          entityId: client.id,
-          tone: "warning"
-        });
-      }
-      return nextState;
-    });
-  }, [data.clients, user]);
-
   const handleInstallApp = async () => {
     if (appInstalled) return;
     if (!deferredPrompt) {
@@ -5391,31 +5528,65 @@ export default function App() {
     notify("Notifications cleared.");
   }
 
-  function createEngineer(form) {
-    const engineer = {
-      id: uid("eng"),
-      name: form.name.trim(),
-      phone: form.phone.trim(),
-      email: "",
-      specialization: "",
-      status: form.status || "active"
-    };
-    setData((current) => ({
-      ...current,
-      engineers: [engineer, ...(current.engineers || [])]
-    }));
-    setShowEngineerModal(false);
-    notify(`${engineer.name} added to engineers.`);
+  async function assignEngineerToAppeal(appealId, engineerId) {
+    if (!navigator.onLine) {
+      notify("Connect to the internet before assigning an engineer so notification emails can be sent.", "warning");
+      return false;
+    }
+    try {
+      const result = await apiRequest(`/appeals/${appealId}/assignment`, {
+        method: "PATCH",
+        body: JSON.stringify({ engineerId }),
+        timeoutMs: 30000
+      });
+      if (result.state) {
+        setDataState(result.state);
+        saveState(result.state);
+        clearPendingState();
+        setPendingSync(false);
+        setApiStatus("connected");
+      }
+      if (result.unchanged) return true;
+
+      const clientSent = Number(result.email?.client?.sent || 0) > 0;
+      const engineerSent = !engineerId || Number(result.email?.engineer?.sent || 0) > 0;
+      const assignmentMessage = engineerId ? "Engineer assigned and issue moved to in review." : "Engineer assignment cleared.";
+      if (clientSent && engineerSent) {
+        notify(`${assignmentMessage} Email notifications were sent.`);
+      } else if (result.email?.client?.skipped || result.email?.engineer?.skipped) {
+        notify(`${assignmentMessage} Email is not configured, so one or more emails were skipped.`, "warning");
+      } else {
+        notify(`${assignmentMessage} One or more notification emails could not be delivered.`, "warning");
+      }
+      return true;
+    } catch (error) {
+      notify(friendlyErrorMessage(error), "error");
+      return false;
+    }
   }
 
-  function updateEngineerStatus(engineerId, status) {
-    setData((current) => ({
-      ...current,
-      engineers: (current.engineers || []).map((engineer) =>
-        engineer.id === engineerId ? { ...engineer, status } : engineer
-      )
-    }));
-    notify(`Engineer marked ${formatStatusLabel(status).toLowerCase()}.`);
+  async function saveEngineer(form, engineerId = null) {
+    try {
+      const result = await apiRequest(engineerId ? `/engineers/${engineerId}` : "/engineers", {
+        method: engineerId ? "PUT" : "POST",
+        body: JSON.stringify(form)
+      });
+      setDataState(result.state);
+      saveState(result.state);
+      setShowEngineerModal(false);
+      setEditingEngineer(null);
+      notify(`${result.engineer.name} ${engineerId ? "updated" : "added to engineers"}.`);
+      return true;
+    } catch (error) {
+      notify(friendlyErrorMessage(error), "error");
+      return false;
+    }
+  }
+
+  async function updateEngineerStatus(engineerId, status) {
+    const engineer = (data.engineers || []).find((item) => item.id === engineerId);
+    if (!engineer) return;
+    await saveEngineer({ ...engineer, status }, engineerId);
   }
 
   function updateAdminAlertEmail(email) {
@@ -5788,16 +5959,17 @@ export default function App() {
           {pendingSync && <button type="button" onClick={syncPendingState}>Retry sync</button>}
         </div>
       )}
-      {view === "dashboard" && <Dashboard user={user} data={data} scopedAssets={scopedAssets} scopedAppeals={scopedAppeals} clientBrand={clientBrand} setData={setData} onOpenAsset={openAssetFromDashboard} onOpenAppeal={openAppealFromDashboard} onOpenService={openServiceFromDashboard} />}
+      {view === "dashboard" && <Dashboard user={user} data={data} scopedAssets={scopedAssets} scopedAppeals={scopedAppeals} clientBrand={clientBrand} setData={setData} onOpenAsset={openAssetFromDashboard} onOpenAppeal={openAppealFromDashboard} onOpenService={openServiceFromDashboard} setView={setViewState} />}
       {view === "companies" && user.role === "admin" && <CompaniesPage user={user} data={data} setData={setData} setDataState={setDataState} notify={notify} />}
       {view === "assets" && <AssetsPage user={user} data={data} scopedAssets={scopedAssets} setData={setData} notify={notify} onAddEngineer={() => setShowEngineerModal(true)} initialSelectedId={routeSelection.assetId} />}
-      {view === "appeals" && <AppealsPage user={user} data={data} scopedAppeals={scopedAppeals} scopedAssets={scopedAssets} setData={setData} notify={notify} initialSelectedId={routeSelection.appealId} />}
+      {view === "engineers" && user.role === "admin" && <EngineersPage data={data} onAdd={() => { setEditingEngineer(null); setShowEngineerModal(true); }} onEdit={(engineer) => { setEditingEngineer(engineer); setShowEngineerModal(true); }} onUpdateStatus={updateEngineerStatus} />}
+      {view === "appeals" && <AppealsPage user={user} data={data} scopedAppeals={scopedAppeals} scopedAssets={scopedAssets} setData={setData} notify={notify} onAssignEngineer={assignEngineerToAppeal} initialSelectedId={routeSelection.appealId} />}
       {view === "service" && user.role === "admin" && <ServicePage user={user} data={data} setData={setData} notify={notify} initialSelectedId={routeSelection.serviceId} />}
       {view === "service" && user.role === "client" && <ClientServiceHistoryPage scopedAssets={scopedAssets} data={data} />}
       {view === "settings" && user.role === "admin" && <AdminSettingsPage data={data} notify={notify} onUpdateClientCredentials={updateClientCredentials} onResolveCredentialRequest={resolveCredentialRequest} onChangeAdminPassword={changeAdminPassword} onUpdateAdminAlertEmail={updateAdminAlertEmail} onSendAdminAlertTest={sendAdminAlertTest} />}
       {view === "settings" && user.role === "client" && <ClientSettingsPage user={user} data={data} notify={notify} onSubmitCredentialRequest={submitCredentialRequest} />}
       {view === "terms" && user.role === "client" && <TermsPage />}
-      {user.role === "admin" && <EngineerModal engineers={data.engineers || []} isOpen={showEngineerModal} onClose={() => setShowEngineerModal(false)} onCreate={createEngineer} onUpdateStatus={updateEngineerStatus} />}
+      {user.role === "admin" && <EngineerModal isOpen={showEngineerModal} engineer={editingEngineer} onClose={() => { setShowEngineerModal(false); setEditingEngineer(null); }} onSave={saveEngineer} />}
     </Shell>
   );
 }

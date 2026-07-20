@@ -445,8 +445,14 @@ function notificationRecipients(notification, state) {
   const admins = adminAlertEmail
     ? [{ id: "admin-alert", name: "Admin", email: adminAlertEmail }]
     : state.users.filter((user) => user.role === "admin" && validateEmail(user.email));
+  const company = notification.clientId
+    ? (state.clients || []).find((item) => item.id === notification.clientId)
+    : null;
   const clientUsers = notification.clientId
-    ? state.users.filter((user) => user.role === "client" && user.clientId === notification.clientId && validateEmail(user.email))
+    ? [
+        ...state.users.filter((user) => user.role === "client" && user.clientId === notification.clientId && validateEmail(user.email)),
+        ...(validateEmail(company?.email) ? [{ id: `company-${company.id}`, name: company.companyName, email: company.email }] : [])
+      ]
     : [];
   const recipients = notification.actorRole === "client"
     ? admins
@@ -457,8 +463,10 @@ function notificationRecipients(notification, state) {
 }
 
 const emailNotificationTypes = new Set([
+  "amc_expiring",
   "appeal_created",
   "appeal_updated",
+  "appeal_assigned",
   "credentials_updated",
   "credential_request",
   "credential_request_resolved",
@@ -776,19 +784,23 @@ async function emailNewNotifications(newNotifications, state) {
 async function sendAdminAlertTestEmail(email) {
   if (!isEmailEnabled()) return { sent: 0, failed: 0, skipped: true };
   const appUrl = getAppUrl();
+  const sampleExpiryDate = new Date();
+  sampleExpiryDate.setDate(sampleExpiryDate.getDate() + 30);
+  const formattedExpiryDate = sampleExpiryDate.toISOString().slice(0, 10);
   const notification = {
-    title: "Admin alert email test",
-    message: "This confirms HAAK Asset Management can send alerts to this admin email address.",
-    companyName: "HAAK INFOTECH",
+    type: "amc_expiring",
+    title: "AMC expiration alert",
+    message: `Sample Company AMC expires in 30 days on ${formattedExpiryDate}. Please renew the contract.`,
+    companyName: "Sample Company",
     actorRole: "system",
     actorName: "System",
-    entityType: "email",
-    tone: "success",
+    entityType: "AMC",
+    tone: "warning",
     createdAt: new Date().toISOString()
   };
   const result = await sendMailUnified({
     to: email,
-    subject: "[HAAK Assets] Admin alert email test",
+    subject: "[TEST] [HAAK Assets] AMC expiration alert",
     text: [
       notification.title,
       "",
@@ -835,6 +847,165 @@ async function readState() {
 
 async function writeState(state) {
   await writeNormalizedState(state);
+}
+
+async function sendEngineerAssignmentEmail({ engineer, appeal, client, asset, assignedBy }) {
+  if (!isEmailEnabled() || !validateEmail(engineer?.email)) {
+    return { sent: 0, failed: 0, skipped: true };
+  }
+  const appUrl = getAppUrl();
+  const notification = {
+    title: "You have been assigned a task",
+    message: `${assignedBy} assigned you the issue "${appeal.title}" for ${client?.companyName || "a client"}. Priority: ${appeal.priority}. Asset: ${asset?.name || "Not specified"}. Details: ${appeal.description}`,
+    companyName: client?.companyName || "HAAK Asset Management",
+    actorName: assignedBy,
+    actorRole: "admin",
+    entityType: "issue assignment",
+    tone: "warning",
+    createdAt: appeal.assignedAt
+  };
+  return sendMailUnified({
+    to: engineer.email,
+    subject: `[HAAK Assets] Task assigned: ${appeal.title}`,
+    text: [
+      `Hello ${engineer.name},`,
+      "",
+      "You have been assigned this task:",
+      `Issue: ${appeal.title}`,
+      `Description: ${appeal.description}`,
+      `Priority: ${appeal.priority}`,
+      `Company: ${client?.companyName || "Not specified"}`,
+      `Asset: ${asset?.name || "Not specified"}`,
+      `Assigned by: ${assignedBy}`,
+      appUrl ? `Open portal: ${appUrl}` : ""
+    ].filter(Boolean).join("\n"),
+    html: buildNotificationEmail(notification, appUrl),
+    attachments: emailLogoAttachments()
+  });
+}
+
+async function sendEngineerUnassignmentEmail({ engineer, appeal, replacementEngineer }) {
+  if (!isEmailEnabled() || !validateEmail(engineer?.email)) {
+    return { sent: 0, failed: 0, skipped: true };
+  }
+  const replacementText = replacementEngineer ? ` It has been reassigned to ${replacementEngineer.name}.` : "";
+  const notification = {
+    title: "Task assignment removed",
+    message: `You are no longer assigned to the issue "${appeal.title}".${replacementText}`,
+    companyName: "HAAK Asset Management",
+    actorName: "Admin",
+    actorRole: "admin",
+    entityType: "issue assignment",
+    tone: "info",
+    createdAt: new Date().toISOString()
+  };
+  return sendMailUnified({
+    to: engineer.email,
+    subject: `[HAAK Assets] Assignment removed: ${appeal.title}`,
+    text: notification.message,
+    html: buildNotificationEmail(notification, getAppUrl()),
+    attachments: emailLogoAttachments()
+  });
+}
+
+async function sendAssignmentPreviewEmails(email) {
+  if (!isEmailEnabled()) return { sent: 0, failed: 0, skipped: true };
+  const appUrl = getAppUrl();
+  const createdAt = new Date().toISOString();
+  const clientPreview = {
+    title: "Engineer assigned to your task",
+    message: "Rahul Sharma has been assigned to your task \"Laptop is not starting\". You will be notified when there is an update.",
+    companyName: "Sample Client Company",
+    actorName: "HAAK Admin",
+    actorRole: "admin",
+    entityType: "issue",
+    tone: "success",
+    createdAt
+  };
+  const engineerPreview = {
+    title: "You have been assigned a task",
+    message: "HAAK Admin assigned you the issue \"Laptop is not starting\" for Sample Client Company. Priority: high. Asset: Dell Latitude 5420. Details: The laptop does not power on after pressing the power button.",
+    companyName: "Sample Client Company",
+    actorName: "HAAK Admin",
+    actorRole: "admin",
+    entityType: "issue assignment",
+    tone: "warning",
+    createdAt
+  };
+  const results = await Promise.allSettled([
+    sendMailUnified({
+      to: email,
+      subject: "[PREVIEW - CLIENT] Engineer assigned to your task",
+      text: `${clientPreview.title}\n\n${clientPreview.message}\n\nOpen: ${appUrl}`,
+      html: buildNotificationEmail(clientPreview, appUrl),
+      attachments: emailLogoAttachments()
+    }),
+    sendMailUnified({
+      to: email,
+      subject: "[PREVIEW - ENGINEER] You have been assigned a task",
+      text: `${engineerPreview.title}\n\n${engineerPreview.message}\n\nOpen: ${appUrl}`,
+      html: buildNotificationEmail(engineerPreview, appUrl),
+      attachments: emailLogoAttachments()
+    })
+  ]);
+  const failed = results.filter((result) => result.status === "rejected");
+  if (failed.length) failed.forEach((result) => console.warn("Assignment preview email failed:", smtpErrorDetail(result.reason)));
+  return { sent: results.length - failed.length, failed: failed.length, skipped: false };
+}
+
+const AMC_ALERT_MILESTONES = [0, 10, 20, 30];
+let amcAlertRun = null;
+
+async function runAmcExpiryAlerts(now = new Date()) {
+  if (amcAlertRun) return amcAlertRun;
+  amcAlertRun = (async () => {
+    const state = await readState();
+    const dayStart = new Date(now);
+    dayStart.setHours(0, 0, 0, 0);
+    const existingKeys = new Set((state.notifications || [])
+      .filter((item) => item.type === "amc_expiring")
+      .map((item) => item.entityId));
+    const notifications = [];
+
+    for (const client of state.clients || []) {
+      if (!client.amcEndDate || client.status === "inactive") continue;
+      const endDate = new Date(`${client.amcEndDate}T00:00:00`);
+      if (Number.isNaN(endDate.getTime())) continue;
+      const daysLeft = Math.ceil((endDate.getTime() - dayStart.getTime()) / 86400000);
+      const milestone = AMC_ALERT_MILESTONES.find((days) => daysLeft <= days);
+      if (milestone === undefined || daysLeft < 0) continue;
+      const entityId = `${client.id}:amc:${milestone}`;
+      if (existingKeys.has(entityId)) continue;
+      const timing = daysLeft === 0 ? "expires today" : `expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+      notifications.push({
+        id: `notification-${randomUUID()}`,
+        type: "amc_expiring",
+        title: "AMC expiration alert",
+        message: `${client.companyName} AMC ${timing} on ${client.amcEndDate}. Please renew the contract.`,
+        clientId: client.id,
+        companyName: client.companyName,
+        actorRole: "system",
+        actorName: "System",
+        entityType: "amc",
+        entityId,
+        tone: "warning",
+        createdAt: now.toISOString(),
+        readBy: []
+      });
+    }
+
+    if (notifications.length === 0) return { created: 0, email: { sent: 0, failed: 0, skipped: true } };
+    const notifiedClientIds = new Set(notifications.map((item) => item.clientId));
+    const nextState = {
+      ...state,
+      clients: state.clients.map((client) => notifiedClientIds.has(client.id) ? { ...client, amcRenewalNoticeSentAt: now.toISOString() } : client),
+      notifications: [...notifications, ...(state.notifications || [])]
+    };
+    await writeState(nextState);
+    const email = await emailNewNotifications(notifications, nextState);
+    return { created: notifications.length, email };
+  })().finally(() => { amcAlertRun = null; });
+  return amcAlertRun;
 }
 
 async function mergePasswords(nextState, currentState) {
@@ -931,11 +1102,26 @@ function mergeClientState(nextState, currentState, auth) {
         : notification;
     });
 
+  const currentAppeals = new Map((currentState.appeals || []).map((appeal) => [appeal.id, appeal]));
+  const mergedAppeals = (nextState.appeals || currentState.appeals || []).map((appeal) => {
+    const currentAppeal = currentAppeals.get(appeal.id);
+    if (!currentAppeal) {
+      return { ...appeal, clientId: ownClientId, assignedEngineerId: null, assignedAt: null, assignedBy: null };
+    }
+    return {
+      ...appeal,
+      clientId: currentAppeal.clientId,
+      assignedEngineerId: currentAppeal.assignedEngineerId || null,
+      assignedAt: currentAppeal.assignedAt || null,
+      assignedBy: currentAppeal.assignedBy || null
+    };
+  });
+
   return {
     ...currentState,
     assets: [...addedAssets, ...preservedAndEditedAssets],
     credentialRequests: nextState.credentialRequests || currentState.credentialRequests,
-    appeals: nextState.appeals || currentState.appeals,
+    appeals: mergedAppeals,
     appealMessages: nextState.appealMessages || currentState.appealMessages,
     notifications: [...addedNotifications, ...mergedNotifications]
   };
@@ -1118,6 +1304,153 @@ app.put("/api/state", requireAuth, async (request, response) => {
   }
 });
 
+app.post("/api/engineers", requireAuth, requireAdmin, async (request, response) => {
+  try {
+    const state = await readState();
+    const email = String(request.body?.email || "").trim().toLowerCase();
+    const name = String(request.body?.name || "").trim();
+    const phone = normalizePhone(request.body?.phone);
+    if (!name || !phone || !validateEmail(email)) {
+      return response.status(400).json({ error: "Engineer name, contact number, and a valid email are required." });
+    }
+    if ((state.engineers || []).some((item) => item.email.toLowerCase() === email)) {
+      return response.status(409).json({ error: "An engineer with this email already exists." });
+    }
+    const engineer = {
+      id: uid("eng"),
+      name,
+      email,
+      phone,
+      photoUrl: String(request.body?.photoUrl || ""),
+      specialization: String(request.body?.specialization || "").trim(),
+      status: request.body?.status === "inactive" ? "inactive" : "active"
+    };
+    const nextState = { ...state, engineers: [engineer, ...(state.engineers || [])] };
+    await writeState(nextState);
+    response.status(201).json({ engineer, state: publicState(nextState) });
+  } catch (error) {
+    sendApiError(response, error);
+  }
+});
+
+app.put("/api/engineers/:engineerId", requireAuth, requireAdmin, async (request, response) => {
+  try {
+    const state = await readState();
+    const existing = (state.engineers || []).find((item) => item.id === request.params.engineerId);
+    if (!existing) return response.status(404).json({ error: "Engineer not found." });
+    const email = String(request.body?.email ?? existing.email).trim().toLowerCase();
+    const name = String(request.body?.name ?? existing.name).trim();
+    const phone = normalizePhone(request.body?.phone ?? existing.phone);
+    if (!name || !phone || !validateEmail(email)) {
+      return response.status(400).json({ error: "Engineer name, contact number, and a valid email are required." });
+    }
+    if ((state.engineers || []).some((item) => item.id !== existing.id && item.email.toLowerCase() === email)) {
+      return response.status(409).json({ error: "An engineer with this email already exists." });
+    }
+    const engineer = {
+      ...existing,
+      name,
+      email,
+      phone,
+      photoUrl: String(request.body?.photoUrl ?? existing.photoUrl ?? ""),
+      specialization: String(request.body?.specialization ?? existing.specialization ?? "").trim(),
+      status: request.body?.status === "inactive" ? "inactive" : "active"
+    };
+    const nextState = { ...state, engineers: state.engineers.map((item) => item.id === existing.id ? engineer : item) };
+    await writeState(nextState);
+    response.json({ engineer, state: publicState(nextState) });
+  } catch (error) {
+    sendApiError(response, error);
+  }
+});
+
+app.patch("/api/appeals/:appealId/assignment", requireAuth, requireAdmin, async (request, response) => {
+  try {
+    const state = await readState();
+    const appeal = (state.appeals || []).find((item) => item.id === request.params.appealId);
+    if (!appeal) return response.status(404).json({ error: "Issue not found." });
+    if (["resolved", "approved", "closed"].includes(appeal.status)) {
+      return response.status(409).json({ error: "Engineer assignment is locked for resolved or closed issues." });
+    }
+
+    const engineerId = request.body?.engineerId ? String(request.body.engineerId) : null;
+    const engineer = engineerId ? (state.engineers || []).find((item) => item.id === engineerId) : null;
+    if (engineerId && !engineer) return response.status(404).json({ error: "Engineer not found." });
+    if (engineer && engineer.status === "inactive") {
+      return response.status(409).json({ error: "Inactive engineers cannot be assigned to issues." });
+    }
+    if (engineer && !validateEmail(engineer.email)) {
+      return response.status(422).json({ error: "The engineer needs a valid email address before assignment." });
+    }
+    if ((appeal.assignedEngineerId || null) === engineerId) {
+      return response.json({ state: publicState(state), unchanged: true, email: { client: { skipped: true }, engineer: { skipped: true } } });
+    }
+
+    const previousEngineer = appeal.assignedEngineerId
+      ? (state.engineers || []).find((item) => item.id === appeal.assignedEngineerId)
+      : null;
+    const admin = (state.users || []).find((item) => item.id === request.auth.sub);
+    const client = (state.clients || []).find((item) => item.id === appeal.clientId);
+    const asset = (state.assets || []).find((item) => item.id === appeal.assetId);
+    const now = new Date().toISOString();
+    const updatedAppeal = {
+      ...appeal,
+      assignedEngineerId: engineerId,
+      assignedAt: engineer ? now : null,
+      assignedBy: engineer ? request.auth.sub : null,
+      status: engineer && appeal.status === "open" ? "in_review" : (!engineer && appeal.status === "in_review" ? "open" : appeal.status),
+      updatedAt: now
+    };
+    const notification = {
+      id: uid("notification"),
+      type: "appeal_assigned",
+      title: engineer ? "Engineer assigned to your task" : "Engineer assignment removed",
+      message: engineer
+        ? `${engineer.name} has been assigned to your task "${appeal.title}". You will be notified when there is an update.`
+        : `The engineer assignment for your task "${appeal.title}" has been removed.`,
+      clientId: appeal.clientId,
+      companyName: client?.companyName || "",
+      actorRole: "admin",
+      actorName: admin?.name || "Admin",
+      entityType: "appeal",
+      entityId: appeal.id,
+      tone: engineer ? "success" : "warning",
+      readBy: [],
+      createdAt: now
+    };
+    const nextState = {
+      ...state,
+      appeals: state.appeals.map((item) => item.id === appeal.id ? updatedAppeal : item),
+      notifications: [notification, ...(state.notifications || [])].slice(0, 500)
+    };
+    await writeState(nextState);
+
+    const emailTasks = [emailNewNotifications([notification], nextState)];
+    emailTasks.push(engineer
+      ? sendEngineerAssignmentEmail({ engineer, appeal: updatedAppeal, client, asset, assignedBy: admin?.name || "Admin" })
+      : Promise.resolve({ sent: 0, failed: 0, skipped: true }));
+    if (previousEngineer && previousEngineer.id !== engineerId) {
+      emailTasks.push(sendEngineerUnassignmentEmail({ engineer: previousEngineer, appeal, replacementEngineer: engineer }));
+    }
+    const emailResults = await Promise.allSettled(emailTasks);
+    const emailValue = (index) => emailResults[index]?.status === "fulfilled"
+      ? emailResults[index].value
+      : { sent: 0, failed: 1, skipped: false, error: smtpErrorDetail(emailResults[index]?.reason) };
+
+    response.json({
+      state: publicState(nextState),
+      appeal: updatedAppeal,
+      email: {
+        client: emailValue(0),
+        engineer: emailValue(1),
+        previousEngineer: emailResults[2] ? emailValue(2) : { sent: 0, failed: 0, skipped: true }
+      }
+    });
+  } catch (error) {
+    sendApiError(response, error);
+  }
+});
+
 app.get("/api/users/me", requireAuth, async (request, response) => {
   const state = await readState();
   const user = state.users.find((item) => item.id === request.auth.sub);
@@ -1144,6 +1477,27 @@ app.post("/api/email/admin-alert/test", requireAuth, requireAdmin, async (reques
   } catch (error) {
     console.warn("Admin alert test email failed:", error);
     response.status(502).json({ error: "Unable to send test email.", detail: smtpErrorDetail(error) });
+  }
+});
+
+app.post("/api/email/assignment-preview", requireAuth, requireAdmin, async (request, response) => {
+  const state = await readState();
+  const email = String(request.body?.email || state.settings?.adminAlertEmail || "").trim();
+  if (!validateEmail(email)) return response.status(400).json({ error: "Enter a valid preview email address." });
+  if (!isEmailEnabled()) return response.status(503).json({ error: "Email delivery is not configured on the server." });
+  try {
+    const result = await sendAssignmentPreviewEmails(email);
+    response.json({ ok: result.sent === 2, email, result });
+  } catch (error) {
+    response.status(502).json({ error: "Unable to send assignment previews.", detail: smtpErrorDetail(error) });
+  }
+});
+
+app.post("/api/amc-alerts/run", requireAuth, requireAdmin, async (_request, response) => {
+  try {
+    response.json({ ok: true, ...(await runAmcExpiryAlerts()) });
+  } catch (error) {
+    sendApiError(response, error);
   }
 });
 
@@ -1646,7 +2000,14 @@ ensureSchema()
   .then(() => {
     const server = app.listen(port, () => {
       console.log(`HAAK Asset API listening on http://127.0.0.1:${port}`);
+      runAmcExpiryAlerts().then((result) => {
+        if (result.created > 0) console.log(`Created ${result.created} AMC expiration alert(s).`);
+      }).catch((error) => console.error("AMC expiration alert check failed", error));
     });
+    const amcAlertInterval = setInterval(() => {
+      runAmcExpiryAlerts().catch((error) => console.error("AMC expiration alert check failed", error));
+    }, Number(process.env.AMC_ALERT_CHECK_INTERVAL_MS || 6 * 60 * 60 * 1000));
+    amcAlertInterval.unref();
     server.on("error", (error) => {
       if (error.code === "EADDRINUSE") {
         console.error(`Port ${port} is already in use. Stop the existing API process or set API_PORT to another port.`);

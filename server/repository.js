@@ -159,12 +159,14 @@ export async function ensureNormalizedSchema() {
       name TEXT NOT NULL,
       email TEXT NOT NULL DEFAULT '',
       phone TEXT NOT NULL DEFAULT '',
+      photo_url TEXT NOT NULL DEFAULT '',
       specialization TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'active',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await query("ALTER TABLE engineers ADD COLUMN IF NOT EXISTS photo_url TEXT NOT NULL DEFAULT ''");
 
   await query(`
     CREATE TABLE IF NOT EXISTS appeals (
@@ -182,6 +184,8 @@ export async function ensureNormalizedSchema() {
   `);
 
   await query("ALTER TABLE appeals ADD COLUMN IF NOT EXISTS assigned_engineer_id TEXT REFERENCES engineers(id) ON DELETE SET NULL");
+  await query("ALTER TABLE appeals ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ");
+  await query("ALTER TABLE appeals ADD COLUMN IF NOT EXISTS assigned_by TEXT REFERENCES users(id) ON DELETE SET NULL");
 
   await query(`
     CREATE TABLE IF NOT EXISTS appeal_messages (
@@ -292,6 +296,7 @@ export async function readState() {
       name: engineer.name,
       email: engineer.email,
       phone: engineer.phone,
+      photoUrl: engineer.photo_url,
       specialization: engineer.specialization,
       status: engineer.status
     })),
@@ -358,6 +363,8 @@ export async function readState() {
       assetId: appeal.asset_id,
       clientId: appeal.client_id,
       assignedEngineerId: appeal.assigned_engineer_id,
+      assignedAt: timestampValue(appeal.assigned_at),
+      assignedBy: appeal.assigned_by,
       raisedBy: appeal.raised_by,
       title: appeal.title,
       description: appeal.description,
@@ -557,21 +564,23 @@ async function writeStateOnce(state) {
 
     for (const engineer of state.engineers || []) {
       await client.query(
-        `INSERT INTO engineers (id, name, email, phone, specialization, status)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [engineer.id, engineer.name, engineer.email || "", engineer.phone || "", engineer.specialization || "", engineer.status || "active"]
+        `INSERT INTO engineers (id, name, email, phone, photo_url, specialization, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [engineer.id, engineer.name, engineer.email || "", engineer.phone || "", engineer.photoUrl || "", engineer.specialization || "", engineer.status || "active"]
       );
     }
 
     for (const appeal of state.appeals || []) {
       await client.query(
-        `INSERT INTO appeals (id, asset_id, client_id, assigned_engineer_id, raised_by, title, description, priority, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        `INSERT INTO appeals (id, asset_id, client_id, assigned_engineer_id, assigned_at, assigned_by, raised_by, title, description, priority, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
         [
           appeal.id,
           appeal.assetId,
           appeal.clientId,
           appeal.assignedEngineerId || null,
+          appeal.assignedAt || null,
+          appeal.assignedBy || null,
           appeal.raisedBy || null,
           appeal.title,
           appeal.description || "",
