@@ -1185,6 +1185,31 @@ nav {
   gap: 6px;
 }
 
+.asset-subnav {
+  display: grid;
+  gap: 4px;
+  margin: -2px 0 4px 26px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(226, 232, 240, 0.18);
+}
+
+.asset-subnav button {
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.subnav-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sidebar-collapsed .asset-subnav {
+  display: none;
+}
+
 nav button,
 .logout,
 .collapse-toggle,
@@ -3698,6 +3723,154 @@ dl dt {
 [data-theme="dark"] .engineer-task-row {
   border-color: rgba(148, 163, 184, 0.22);
   background: rgba(2, 11, 24, 0.55);
+}
+
+.software-hero,
+.software-workspace,
+.software-detail-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.software-hero {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.software-hero h1 {
+  margin: 6px 0;
+}
+
+.software-workspace {
+  grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.5fr);
+  align-items: start;
+}
+
+.software-directory,
+.software-list,
+.assigned-software-assets {
+  display: grid;
+  gap: 10px;
+}
+
+.software-directory > select {
+  width: 100%;
+}
+
+.software-list {
+  max-height: 620px;
+  overflow: auto;
+}
+
+.software-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px 12px;
+  padding: 14px;
+  border: 1px solid #dbe4ef;
+  border-radius: 9px;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+}
+
+.software-card:hover,
+.software-card.active {
+  border-color: var(--haak-red);
+  background: #fff5f5;
+}
+
+.software-card small {
+  color: #64748b;
+}
+
+.software-detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 16px 0;
+}
+
+.software-detail-grid > span {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  overflow-wrap: anywhere;
+}
+
+.software-detail-grid > span > strong {
+  color: #64748b;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.credential-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.software-assignment-field {
+  grid-column: 1 / -1;
+  padding: 14px;
+  border: 1px solid #dbe4ef;
+  border-radius: 9px;
+}
+
+.software-asset-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.software-asset-options label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.software-asset-options label span {
+  display: grid;
+  gap: 3px;
+}
+
+.software-asset-options input {
+  width: auto;
+}
+
+.assigned-software-assets {
+  margin: 12px 0 18px;
+}
+
+.assigned-software-assets > div {
+  display: grid;
+  gap: 4px;
+  padding: 11px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+[data-theme="dark"] .software-card,
+[data-theme="dark"] .software-detail-grid > span,
+[data-theme="dark"] .software-asset-options label,
+[data-theme="dark"] .assigned-software-assets > div {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(2, 11, 24, 0.55);
+  color: #e2e8f0;
+}
+
+@media (max-width: 820px) {
+  .software-hero,
+  .software-workspace,
+  .software-detail-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 [data-theme="dark"] .engineer-card {

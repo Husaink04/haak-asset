@@ -122,9 +122,12 @@ function publicUser(user) {
   return safeUser;
 }
 
-function publicState(state) {
+function publicState(state, auth = null) {
   return {
     ...state,
+    softwareAssets: auth?.role === "client"
+      ? (state.softwareAssets || []).filter((software) => software.clientId === auth.clientId)
+      : (state.softwareAssets || []),
     settings: {
       adminAlertEmail: state.settings?.adminAlertEmail || "huzefarampurawala9@gmail.com"
     },
@@ -467,6 +470,9 @@ const emailNotificationTypes = new Set([
   "appeal_created",
   "appeal_updated",
   "appeal_assigned",
+  "software_created",
+  "software_updated",
+  "software_expiring",
   "credentials_updated",
   "credential_request",
   "credential_request_resolved",
@@ -963,7 +969,7 @@ async function runAmcExpiryAlerts(now = new Date()) {
     const dayStart = new Date(now);
     dayStart.setHours(0, 0, 0, 0);
     const existingKeys = new Set((state.notifications || [])
-      .filter((item) => item.type === "amc_expiring")
+      .filter((item) => item.type === "amc_expiring" || item.type === "software_expiring")
       .map((item) => item.entityId));
     const notifications = [];
 
@@ -994,8 +1000,36 @@ async function runAmcExpiryAlerts(now = new Date()) {
       });
     }
 
+    for (const software of state.softwareAssets || []) {
+      if (!software.validityDate || software.status === "inactive") continue;
+      const validityDate = new Date(`${software.validityDate}T00:00:00`);
+      if (Number.isNaN(validityDate.getTime())) continue;
+      const daysLeft = Math.ceil((validityDate.getTime() - dayStart.getTime()) / 86400000);
+      const milestone = AMC_ALERT_MILESTONES.find((days) => daysLeft <= days);
+      if (milestone === undefined || daysLeft < 0) continue;
+      const entityId = `${software.id}:software:${software.validityDate}:${milestone}`;
+      if (existingKeys.has(entityId)) continue;
+      const client = (state.clients || []).find((item) => item.id === software.clientId);
+      const timing = daysLeft === 0 ? "expires today" : `expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+      notifications.push({
+        id: `notification-${randomUUID()}`,
+        type: "software_expiring",
+        title: "Software validity expiration alert",
+        message: `${software.softwareName} ${timing} on ${software.validityDate}. Please renew the license.`,
+        clientId: software.clientId,
+        companyName: client?.companyName || "",
+        actorRole: "system",
+        actorName: "System",
+        entityType: "software_asset",
+        entityId,
+        tone: "warning",
+        createdAt: now.toISOString(),
+        readBy: []
+      });
+    }
+
     if (notifications.length === 0) return { created: 0, email: { sent: 0, failed: 0, skipped: true } };
-    const notifiedClientIds = new Set(notifications.map((item) => item.clientId));
+    const notifiedClientIds = new Set(notifications.filter((item) => item.type === "amc_expiring").map((item) => item.clientId));
     const nextState = {
       ...state,
       clients: state.clients.map((client) => notifiedClientIds.has(client.id) ? { ...client, amcRenewalNoticeSentAt: now.toISOString() } : client),
@@ -1241,12 +1275,12 @@ app.post("/api/auth/login", authLimiter, async (request, response) => {
   if (!user.passwordHash) await writeState(normalizedState);
   const normalizedUser = normalizedState.users.find((item) => item.id === user.id) || user;
 
-  response.json({ token: signToken(normalizedUser), user: publicUser(normalizedUser), state: publicState(normalizedState) });
+  response.json({ token: signToken(normalizedUser), user: publicUser(normalizedUser), state: publicState(normalizedState, normalizedUser) });
 });
 
-app.get("/api/state", requireAuth, async (_request, response) => {
+app.get("/api/state", requireAuth, async (request, response) => {
   const state = await readState();
-  response.json(publicState(state));
+  response.json(publicState(state, request.auth));
 });
 
 app.put("/api/state", requireAuth, async (request, response) => {
@@ -1280,7 +1314,7 @@ app.put("/api/state", requireAuth, async (request, response) => {
     const mergedState = await mergePasswords(lockedState, currentState);
     await writeState(mergedState);
 
-    response.json(publicState(mergedState));
+    response.json(publicState(mergedState, request.auth));
 
     // Email delivery should not hold the state sync response open.
     Promise.resolve().then(async () => {

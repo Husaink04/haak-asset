@@ -84,6 +84,7 @@ const seedState = {
   assetCategories: ["Laptop", "Printer"],
   credentialRequests: [],
   engineers: [],
+  softwareAssets: [],
   notifications: [],
   users: [
     { id: "u-admin", name: "HAAK Admin", email: "admin@haakinfotech.com", password: "admin123", role: "admin" },
@@ -234,6 +235,7 @@ function loadState() {
       })),
       credentialRequests: parsed.credentialRequests || [],
       engineers: parsed.engineers || [],
+      softwareAssets: parsed.softwareAssets || [],
       notifications: parsed.notifications || []
     };
   } catch {
@@ -262,8 +264,8 @@ function saveStoredUser(nextUser) {
 
 function normalizeView(nextView, user) {
   const allowedViews = user?.role === "admin"
-    ? new Set(["dashboard", "companies", "assets", "engineers", "appeals", "service", "settings"])
-    : new Set(["dashboard", "assets", "appeals", "service", "settings", "terms"]);
+    ? new Set(["dashboard", "companies", "assets", "software-assets", "engineers", "appeals", "service", "settings"])
+    : new Set(["dashboard", "assets", "software-assets", "appeals", "service", "settings", "terms"]);
   return allowedViews.has(nextView) ? nextView : "dashboard";
 }
 
@@ -714,9 +716,16 @@ function sidebarBadgeCounts({ user, data, scopedAssets, scopedAppeals }) {
     record.nextServiceDue &&
     record.nextServiceDue <= today()
   ).length;
+  const softwareAssets = (data.softwareAssets || []).filter((software) => user.role === "admin" || software.clientId === user.clientId);
+  const expiringSoftware = softwareAssets.filter((software) => {
+    if (!software.validityDate || software.status === "inactive") return false;
+    const daysLeft = Math.ceil((new Date(`${software.validityDate}T00:00:00`).getTime() - new Date(`${today()}T00:00:00`).getTime()) / 86400000);
+    return daysLeft >= 0 && daysLeft <= 30;
+  }).length;
   return {
     appeals: unreadIssues || (scopedAppeals || []).filter((appeal) => !["resolved", "closed", "approved"].includes(appeal.status)).length,
-    service: dueServices || serviceRecords.filter(isPriorityServiceRecord).length
+    service: dueServices || serviceRecords.filter(isPriorityServiceRecord).length,
+    "software-assets": expiringSoftware
   };
 }
 
@@ -1012,13 +1021,17 @@ function Shell({ user, children, view, setView, onLogout, headerAction, notice, 
         </div>
         <div className="sidebar-section-label">Main</div>
         <nav>
-          {nav.map(([id, label, Icon]) => (
-            <button key={id} className={view === id ? "active" : ""} onClick={() => selectView(id)} title={shellCollapsed ? label : undefined} aria-label={label}>
+          {nav.map(([id, label, Icon]) => <React.Fragment key={id}>
+            <button className={(view === id || (id === "assets" && view === "software-assets")) ? "active" : ""} onClick={() => selectView(id)} title={shellCollapsed ? label : undefined} aria-label={label}>
               <Icon size={18} />
               <span className="nav-label">{label}</span>
               {badgeCounts[id] > 0 && <span className="sidebar-count">{badgeCounts[id]}</span>}
             </button>
-          ))}
+            {id === "assets" && <div className="asset-subnav">
+              <button className={view === "assets" ? "active" : ""} type="button" onClick={() => selectView("assets")}><span className="subnav-dot" /><span className="nav-label">Hardware Assets</span></button>
+              <button className={view === "software-assets" ? "active" : ""} type="button" onClick={() => selectView("software-assets")}><span className="subnav-dot" /><span className="nav-label">Software Assets</span>{badgeCounts["software-assets"] > 0 && <span className="sidebar-count">{badgeCounts["software-assets"]}</span>}</button>
+            </div>}
+          </React.Fragment>)}
         </nav>
         <div className="sidebar-actions">
           <div className="sidebar-section-label">Preferences</div>
@@ -4260,6 +4273,185 @@ function HistoryPanel({ title, items }) {
   );
 }
 
+function SoftwareAssetsPage({ user, data, setData, notify }) {
+  const availableClients = user.role === "admin" ? data.clients : data.clients.filter((client) => client.id === user.clientId);
+  const [filterClientId, setFilterClientId] = useState(user.role === "admin" ? "" : user.clientId);
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [form, setForm] = useState({
+    clientId: availableClients[0]?.id || "",
+    softwareName: "",
+    softwareSerial: "",
+    email: "",
+    password: "",
+    validityDate: "",
+    assignedAssetIds: []
+  });
+  const scopedSoftware = (data.softwareAssets || []).filter((software) => user.role === "admin" || software.clientId === user.clientId);
+  const filtered = scopedSoftware.filter((software) =>
+    (!filterClientId || software.clientId === filterClientId) &&
+    [software.softwareName, software.softwareSerial, software.email].join(" ").toLowerCase().includes(query.toLowerCase())
+  );
+  const selected = scopedSoftware.find((software) => software.id === selectedId) || filtered[0] || null;
+  const formCompany = availableClients.find((client) => client.id === form.clientId);
+  const assignableAssets = data.assets.filter((asset) => asset.clientId === form.clientId);
+
+  function updateForm(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function toggleAssignedAsset(assetId) {
+    setForm((current) => ({
+      ...current,
+      assignedAssetIds: current.assignedAssetIds.includes(assetId)
+        ? current.assignedAssetIds.filter((id) => id !== assetId)
+        : [...current.assignedAssetIds, assetId]
+    }));
+  }
+
+  function createSoftware(event) {
+    event.preventDefault();
+    if (!formCompany || !form.softwareName.trim() || !form.softwareSerial.trim() || !isValidEmail(form.email) || !form.password || !form.validityDate) {
+      notify("Complete all required software fields.", "error");
+      return;
+    }
+    if ((data.softwareAssets || []).some((item) => item.id !== editingId && item.softwareSerial.trim().toLowerCase() === form.softwareSerial.trim().toLowerCase())) {
+      notify("That software serial is already registered.", "error");
+      return;
+    }
+    const now = new Date().toISOString();
+    const existing = editingId ? (data.softwareAssets || []).find((item) => item.id === editingId) : null;
+    const software = {
+      id: existing?.id || uid("software"),
+      clientId: form.clientId,
+      softwareName: form.softwareName.trim(),
+      softwareSerial: form.softwareSerial.trim(),
+      email: form.email.trim().toLowerCase(),
+      password: form.password,
+      validityDate: form.validityDate,
+      assignedAssetIds: form.assignedAssetIds,
+      status: existing?.status || "active",
+      createdAt: existing?.createdAt || now,
+      updatedAt: now
+    };
+    setData((current) => withNotification({
+      ...current,
+      softwareAssets: existing
+        ? (current.softwareAssets || []).map((item) => item.id === existing.id ? software : item)
+        : [software, ...(current.softwareAssets || [])]
+    }, {
+      type: existing ? "software_updated" : "software_created",
+      title: existing ? "Software asset updated" : "Software asset added",
+      message: `${software.softwareName} ${existing ? "was updated for" : "was provided to"} ${formCompany.companyName} and is valid until ${software.validityDate}.`,
+      clientId: software.clientId,
+      companyName: formCompany.companyName,
+      actorRole: user.role,
+      actorName: user.name,
+      entityType: "software_asset",
+      entityId: software.id,
+      tone: "success"
+    }));
+    setSelectedId(software.id);
+    setShowForm(false);
+    setEditingId("");
+    setForm({ clientId: availableClients[0]?.id || "", softwareName: "", softwareSerial: "", email: "", password: "", validityDate: "", assignedAssetIds: [] });
+    notify(`${software.softwareName} ${existing ? "updated" : "added"} successfully.`);
+  }
+
+  function editSoftware(software) {
+    setForm({
+      clientId: software.clientId,
+      softwareName: software.softwareName,
+      softwareSerial: software.softwareSerial,
+      email: software.email,
+      password: software.password,
+      validityDate: software.validityDate,
+      assignedAssetIds: software.assignedAssetIds || []
+    });
+    setEditingId(software.id);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function toggleSoftwareStatus(software) {
+    const status = software.status === "inactive" ? "active" : "inactive";
+    const company = data.clients.find((client) => client.id === software.clientId);
+    setData((current) => withNotification({
+      ...current,
+      softwareAssets: (current.softwareAssets || []).map((item) => item.id === software.id ? { ...item, status, updatedAt: new Date().toISOString() } : item)
+    }, {
+      type: "software_updated",
+      title: "Software status updated",
+      message: `${software.softwareName} was marked ${status}.`,
+      clientId: software.clientId,
+      companyName: company?.companyName || "",
+      actorRole: user.role,
+      actorName: user.name,
+      entityType: "software_asset",
+      entityId: software.id,
+      tone: status === "active" ? "success" : "warning"
+    }));
+    notify(`${software.softwareName} marked ${status}.`);
+  }
+
+  const selectedCompany = selected ? data.clients.find((client) => client.id === selected.clientId) : null;
+  const selectedAssignedAssets = selected ? data.assets.filter((asset) => (selected.assignedAssetIds || []).includes(asset.id)) : [];
+  const selectedExpired = selected?.validityDate && new Date(`${selected.validityDate}T23:59:59`) < new Date();
+
+  return <section className="page-grid software-assets-page">
+    <div className="panel page-hero software-hero">
+      <div><span className="eyebrow">License management</span><h1>Software Assets</h1><p>Manage antivirus, productivity tools, subscriptions, credentials, assignments, and validity dates.</p></div>
+      {user.role === "admin" && <button className="primary" type="button" onClick={() => { if (showForm) { setShowForm(false); setEditingId(""); } else { setEditingId(""); setForm({ clientId: availableClients[0]?.id || "", softwareName: "", softwareSerial: "", email: "", password: "", validityDate: "", assignedAssetIds: [] }); setShowForm(true); } }}><Plus size={16} /> {showForm ? "Close form" : "Add software"}</button>}
+    </div>
+
+    {showForm && user.role === "admin" && <div className="panel">
+      <div className="panel-head"><div><span className="eyebrow">Provision software</span><h2>{editingId ? "Edit software asset" : "Add software asset"}</h2><p>Choose the company first, then assign the license to its hardware assets.</p></div></div>
+      <form className="form-grid software-form" onSubmit={createSoftware}>
+        <label>Company *<select value={form.clientId} onChange={(event) => setForm((current) => ({ ...current, clientId: event.target.value, assignedAssetIds: [] }))} required><option value="">Choose company</option>{availableClients.map((client) => <option key={client.id} value={client.id}>{client.companyName}</option>)}</select></label>
+        <label>Software Name *<input value={form.softwareName} onChange={(event) => updateForm("softwareName", event.target.value)} placeholder="Antivirus, Microsoft 365..." required /></label>
+        <label>Software Serial *<input value={form.softwareSerial} onChange={(event) => updateForm("softwareSerial", event.target.value)} placeholder="License or serial key" required /></label>
+        <label>Email *<input type="email" value={form.email} onChange={(event) => updateForm("email", event.target.value)} placeholder="license@company.com" required /></label>
+        <label>Password *<input type="password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} autoComplete="new-password" required /></label>
+        <label>Software validity *<input type="date" value={form.validityDate} onChange={(event) => updateForm("validityDate", event.target.value)} required /></label>
+        <fieldset className="software-assignment-field"><legend>Software assigned to assets</legend>
+          {form.clientId ? (assignableAssets.length > 0 ? <div className="software-asset-options">{assignableAssets.map((asset) => <label key={asset.id}><input type="checkbox" checked={form.assignedAssetIds.includes(asset.id)} onChange={() => toggleAssignedAsset(asset.id)} /><span><strong>{asset.name}</strong><small>{asset.assetCode} · {asset.userName || "Unassigned user"}</small></span></label>)}</div> : <p>No hardware assets exist for this company yet.</p>) : <p>Choose a company to load its assets.</p>}
+        </fieldset>
+        <button className="primary" type="submit"><Save size={16} /> {editingId ? "Update software asset" : "Save software asset"}</button>
+      </form>
+    </div>}
+
+    <div className="software-workspace">
+      <div className="panel software-directory">
+        <div className="panel-head"><div><span className="eyebrow">Directory</span><h2>Software licenses</h2></div><span className="badge active">{filtered.length}</span></div>
+        <input placeholder="Search software, serial or email" value={query} onChange={(event) => setQuery(event.target.value)} />
+        {user.role === "admin" && <select value={filterClientId} onChange={(event) => { setFilterClientId(event.target.value); setSelectedId(""); }}><option value="">All companies</option>{data.clients.map((client) => <option key={client.id} value={client.id}>{client.companyName}</option>)}</select>}
+        <div className="software-list">{filtered.length > 0 ? filtered.map((software) => {
+          const company = data.clients.find((client) => client.id === software.clientId);
+          const expired = software.validityDate && new Date(`${software.validityDate}T23:59:59`) < new Date();
+          return <button type="button" key={software.id} className={selected?.id === software.id ? "software-card active" : "software-card"} onClick={() => { setSelectedId(software.id); setShowPassword(false); }}><strong>{software.softwareName}</strong><small>{company?.companyName}</small><span className={expired ? "badge inactive" : statusClass(software.status)}>{expired ? "Expired" : formatStatusLabel(software.status)}</span><small>Valid until {software.validityDate || "Not set"}</small></button>;
+        }) : <div className="empty-state compact-empty-state"><Archive size={28} /><h3>No software assets</h3><p>Add a software license to begin.</p></div>}</div>
+      </div>
+
+      <div className="panel software-detail">{selected ? <>
+        <div className="panel-head"><div><span className="eyebrow">Software record</span><h2>{selected.softwareName}</h2><p>{selectedCompany?.companyName || "Unknown company"}</p></div><span className={selectedExpired ? "badge inactive" : statusClass(selected.status)}>{selectedExpired ? "Expired" : formatStatusLabel(selected.status)}</span></div>
+        <div className="software-detail-grid">
+          <span><strong>Software serial</strong><code>{selected.softwareSerial}</code></span>
+          <span><strong>Login email</strong>{selected.email}</span>
+          <span><strong>Password</strong><span className="credential-value">{showPassword ? selected.password : "••••••••"}<button className="secondary" type="button" onClick={() => setShowPassword((current) => !current)}>{showPassword ? "Hide" : "Show"}</button></span></span>
+          <span><strong>Validity</strong>{selected.validityDate}</span>
+          <span><strong>Created</strong>{formatTimestamp(selected.createdAt)}</span>
+          <span><strong>Assigned devices</strong>{selectedAssignedAssets.length}</span>
+        </div>
+        <div className="assigned-software-assets"><h3>Assigned hardware assets</h3>{selectedAssignedAssets.length > 0 ? selectedAssignedAssets.map((asset) => <div key={asset.id}><strong>{asset.name}</strong><small>{asset.assetCode} · {asset.userName || "Unassigned user"}</small></div>) : <p className="muted-copy">This license is not assigned to a hardware asset.</p>}</div>
+        {user.role === "admin" && <div className="inline-actions"><button className="primary" type="button" onClick={() => editSoftware(selected)}>Edit software</button><button className="secondary" type="button" onClick={() => toggleSoftwareStatus(selected)}>Mark {selected.status === "inactive" ? "active" : "inactive"}</button></div>}
+      </> : <div className="empty-state"><Archive size={36} /><h2>Select software</h2><p>Choose a software license to view its credentials and assigned devices.</p></div>}</div>
+    </div>
+  </section>;
+}
+
 function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify, onAssignEngineer, initialSelectedId }) {
   const [selectedId, setSelectedId] = useState(initialSelectedId || scopedAppeals[0]?.id);
   const [newIssue, setNewIssue] = useState({ assetId: scopedAssets[0]?.id || "", title: "", description: "", priority: "medium" });
@@ -5962,6 +6154,7 @@ export default function App() {
       {view === "dashboard" && <Dashboard user={user} data={data} scopedAssets={scopedAssets} scopedAppeals={scopedAppeals} clientBrand={clientBrand} setData={setData} onOpenAsset={openAssetFromDashboard} onOpenAppeal={openAppealFromDashboard} onOpenService={openServiceFromDashboard} setView={setViewState} />}
       {view === "companies" && user.role === "admin" && <CompaniesPage user={user} data={data} setData={setData} setDataState={setDataState} notify={notify} />}
       {view === "assets" && <AssetsPage user={user} data={data} scopedAssets={scopedAssets} setData={setData} notify={notify} onAddEngineer={() => setShowEngineerModal(true)} initialSelectedId={routeSelection.assetId} />}
+      {view === "software-assets" && <SoftwareAssetsPage user={user} data={data} setData={setData} notify={notify} />}
       {view === "engineers" && user.role === "admin" && <EngineersPage data={data} onAdd={() => { setEditingEngineer(null); setShowEngineerModal(true); }} onEdit={(engineer) => { setEditingEngineer(engineer); setShowEngineerModal(true); }} onUpdateStatus={updateEngineerStatus} />}
       {view === "appeals" && <AppealsPage user={user} data={data} scopedAppeals={scopedAppeals} scopedAssets={scopedAssets} setData={setData} notify={notify} onAssignEngineer={assignEngineerToAppeal} initialSelectedId={routeSelection.appealId} />}
       {view === "service" && user.role === "admin" && <ServicePage user={user} data={data} setData={setData} notify={notify} initialSelectedId={routeSelection.serviceId} />}

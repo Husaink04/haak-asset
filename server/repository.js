@@ -1,4 +1,5 @@
 import { pool, query } from "./db.js";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { seedState } from "./seedState.js";
 
 function dateValue(value) {
@@ -11,6 +12,33 @@ function timestampValue(value) {
   if (!value) return new Date().toISOString();
   if (value instanceof Date) return value.toISOString();
   return value;
+}
+
+const softwareCredentialKey = createHash("sha256")
+  .update(process.env.SOFTWARE_CREDENTIAL_KEY || process.env.JWT_SECRET || "dev-only-change-this-secret")
+  .digest();
+
+function encryptSoftwarePassword(value) {
+  const plainText = String(value || "");
+  if (!plainText || plainText.startsWith("enc:v1:")) return plainText;
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", softwareCredentialKey, iv);
+  const encrypted = Buffer.concat([cipher.update(plainText, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc:v1:${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
+}
+
+function decryptSoftwarePassword(value) {
+  const stored = String(value || "");
+  if (!stored.startsWith("enc:v1:")) return stored;
+  try {
+    const [, , ivValue, tagValue, encryptedValue] = stored.split(":");
+    const decipher = createDecipheriv("aes-256-gcm", softwareCredentialKey, Buffer.from(ivValue, "base64"));
+    decipher.setAuthTag(Buffer.from(tagValue, "base64"));
+    return Buffer.concat([decipher.update(Buffer.from(encryptedValue, "base64")), decipher.final()]).toString("utf8");
+  } catch {
+    return "";
+  }
 }
 
 function documentToRow(document) {
@@ -99,6 +127,22 @@ export async function ensureNormalizedSchema() {
   await query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS user_name TEXT NOT NULL DEFAULT ''");
   await query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS branch_id TEXT");
   await query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS department TEXT NOT NULL DEFAULT ''");
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS software_assets (
+      id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      software_name TEXT NOT NULL,
+      software_serial TEXT NOT NULL DEFAULT '',
+      login_email TEXT NOT NULL DEFAULT '',
+      login_password TEXT NOT NULL DEFAULT '',
+      validity_date DATE,
+      assigned_asset_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
 
   await query(`
     CREATE TABLE IF NOT EXISTS asset_categories (
@@ -266,11 +310,12 @@ export async function seedNormalizedState(state) {
 }
 
 export async function readState() {
-  const [users, companies, settings, assets, assetCategories, images, documents, lifecycle, serviceRecords, engineers, appeals, appealMessages, credentialRequests, notifications] = await Promise.all([
+  const [users, companies, settings, assets, softwareAssets, assetCategories, images, documents, lifecycle, serviceRecords, engineers, appeals, appealMessages, credentialRequests, notifications] = await Promise.all([
     query("SELECT * FROM users ORDER BY created_at, id"),
     query("SELECT * FROM companies ORDER BY created_at, id"),
     query("SELECT key, value FROM app_settings"),
     query("SELECT * FROM assets ORDER BY created_at, id"),
+    query("SELECT * FROM software_assets ORDER BY created_at DESC, id"),
     query("SELECT * FROM asset_categories ORDER BY name, id"),
     query("SELECT * FROM asset_images ORDER BY sort_order, id"),
     query("SELECT * FROM asset_documents ORDER BY sort_order, id"),
@@ -347,6 +392,19 @@ export async function readState() {
       lifecycle: lifecycle.rows
         .filter((item) => item.asset_id === asset.id)
         .map((item) => ({ id: item.id, type: item.type, description: item.description, createdAt: item.created_at_text }))
+    })),
+    softwareAssets: softwareAssets.rows.map((asset) => ({
+      id: asset.id,
+      clientId: asset.client_id,
+      softwareName: asset.software_name,
+      softwareSerial: asset.software_serial,
+      email: asset.login_email,
+      password: decryptSoftwarePassword(asset.login_password),
+      validityDate: dateValue(asset.validity_date) || "",
+      assignedAssetIds: Array.isArray(asset.assigned_asset_ids) ? asset.assigned_asset_ids : [],
+      status: asset.status,
+      createdAt: timestampValue(asset.created_at),
+      updatedAt: timestampValue(asset.updated_at)
     })),
     serviceRecords: serviceRecords.rows.map((record) => ({
       id: record.id,
@@ -430,6 +488,7 @@ async function writeStateOnce(state) {
         asset_lifecycle,
         asset_documents,
         asset_images,
+        software_assets,
         assets,
         users,
         companies
@@ -446,6 +505,7 @@ async function writeStateOnce(state) {
     await client.query("DELETE FROM asset_documents");
     await client.query("DELETE FROM asset_images");
     await client.query("DELETE FROM asset_categories");
+    await client.query("DELETE FROM software_assets");
     await client.query("DELETE FROM assets");
     await client.query("DELETE FROM users");
     await client.query("DELETE FROM companies");
@@ -540,6 +600,26 @@ async function writeStateOnce(state) {
           item.createdAt || item.serviceDate || new Date().toISOString()
         ]);
       }
+    }
+
+    for (const software of state.softwareAssets || []) {
+      await client.query(
+        `INSERT INTO software_assets (id, client_id, software_name, software_serial, login_email, login_password, validity_date, assigned_asset_ids, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)`,
+        [
+          software.id,
+          software.clientId,
+          software.softwareName,
+          software.softwareSerial || "",
+          software.email || "",
+          encryptSoftwarePassword(software.password),
+          software.validityDate || null,
+          JSON.stringify(software.assignedAssetIds || []),
+          software.status || "active",
+          software.createdAt || new Date().toISOString(),
+          software.updatedAt || software.createdAt || new Date().toISOString()
+        ]
+      );
     }
 
     const categories = (state.assetCategories && state.assetCategories.length > 0)
