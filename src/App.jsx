@@ -738,8 +738,8 @@ function formatStatusLabel(status) {
   const safeStatus = String(status || "open");
   const labels = {
     in_service: "In service",
-    in_review: "In review",
-    awaiting_client: "Waiting to Client's approval",
+    in_review: "Reviewing",
+    awaiting_client: "Awaiting client approval",
     closed: "Closed/Cancelled",
     approved: "Approved",
     pending: "Repairing",
@@ -4621,6 +4621,18 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify,
   }
 
   function setStatus(status) {
+    const allowedTransitions = {
+      open: ["open", "in_review", "closed"],
+      in_review: ["open", "in_review", "awaiting_client", "resolved", "closed"],
+      awaiting_client: ["in_review", "awaiting_client", "resolved", "closed"],
+      resolved: ["in_review", "awaiting_client", "resolved", "closed"],
+      approved: ["in_review", "approved", "closed"],
+      closed: ["open", "in_review", "closed"]
+    };
+    if (user.role !== "admin" || !allowedTransitions[selected.status]?.includes(status)) {
+      notify("That status change is not allowed from the current appeal status.", "warning");
+      return;
+    }
     const nextSelectedId = status === "closed"
       ? sortedAppeals.find((appeal) => appeal.id !== selected.id && appeal.status !== "closed")?.id
       : selected.id;
@@ -4641,6 +4653,22 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify,
   }
 
   const assignmentLocked = ["resolved", "approved", "closed"].includes(selected?.status);
+  const appealStatusOptions = [
+    { value: "open", label: "Open" },
+    { value: "in_review", label: "Reviewing" },
+    { value: "awaiting_client", label: "Awaiting client approval" },
+    { value: "resolved", label: "Resolved" },
+    { value: "approved", label: "Client approved" },
+    { value: "closed", label: "Closed / Cancelled" }
+  ];
+  const allowedStatusOptions = {
+    open: ["open", "in_review", "closed"],
+    in_review: ["open", "in_review", "awaiting_client", "resolved", "closed"],
+    awaiting_client: ["in_review", "awaiting_client", "resolved", "closed"],
+    resolved: ["in_review", "awaiting_client", "resolved", "closed"],
+    approved: ["in_review", "approved", "closed"],
+    closed: ["open", "in_review", "closed"]
+  };
 
   return (
     <section className={user.role === "admin" ? "appeals-layout" : "appeals-layout client-appeals-layout"}>
@@ -4680,7 +4708,7 @@ function AppealsPage({ user, data, scopedAppeals, scopedAssets, setData, notify,
               <p>{selected.description}</p>
             </div>
             <div className="issue-record-grid">
-              <span><strong>Status</strong>{formatStatusLabel(selected.status)}</span>
+              {user.role === "admin" ? <span className="appeal-status-field"><strong>Status</strong><select value={selected.status} onChange={(event) => setStatus(event.target.value)} aria-label="Appeal status">{appealStatusOptions.map((option) => <option key={option.value} value={option.value} disabled={!allowedStatusOptions[selected.status]?.includes(option.value)}>{option.label}</option>)}</select></span> : <span><strong>Status</strong>{formatStatusLabel(selected.status)}</span>}
               <span><strong>Priority</strong>{selected.priority}</span>
               <span><strong>Raised</strong>{formatTimestamp(selected.createdAt)}</span>
               <span><strong>Updated</strong>{formatTimestamp(selected.updatedAt)}</span>

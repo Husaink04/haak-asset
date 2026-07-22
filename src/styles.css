@@ -3240,13 +3240,18 @@ dl dt {
 }
 
 .conversation-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
   margin-bottom: 18px;
   padding-bottom: 16px;
   border-bottom: 1px solid #e8edf5;
+}
+
+.conversation-head > * {
+  width: 100%;
+  min-width: 0;
 }
 
 .conversation,
@@ -3341,7 +3346,8 @@ dl dt {
 }
 
 .engineer-assign {
-  max-width: 320px;
+  width: min(100%, 420px);
+  max-width: 420px;
 }
 
 .inline-action {
@@ -3355,8 +3361,9 @@ dl dt {
 
 .attachment-gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 240px));
   gap: 12px;
+  justify-content: start;
 }
 
 .attachment-preview {
@@ -3397,6 +3404,24 @@ dl dt {
   background: rgba(15, 23, 42, 0.45);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+.appeal-status-field select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #fff;
+  color: #0f172a;
+  font-weight: 700;
+  text-transform: none;
+}
+
+[data-theme="dark"] .appeal-status-field select {
+  border-color: #334155;
+  background: #0f172a;
+  color: #f8fafc;
 }
 
 .workspace-panel-actions {
