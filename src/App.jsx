@@ -36,6 +36,8 @@ import {
 import React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const STORE_KEY = "haak-asset-management-state-v1";
 const TOKEN_KEY = "haak-asset-management-token-v1";
@@ -1519,6 +1521,359 @@ function EngineerAvatar({ engineer, size = 44 }) {
   );
 }
 
+function assetReportEvents(asset, data) {
+  if (!asset) return [];
+  const appeals = (data.appeals || []).filter((appeal) => appeal.assetId === asset.id);
+  const appealIds = new Set(appeals.map((appeal) => appeal.id));
+  const serviceRecords = (data.serviceRecords || []).filter((record) => record.assetId === asset.id);
+  const serviceIds = new Set(serviceRecords.map((record) => record.id));
+  const engineerById = new Map((data.engineers || []).map((engineer) => [engineer.id, engineer]));
+  const events = [];
+
+  (asset.lifecycle || []).forEach((item) => events.push({
+    id: `lifecycle-${item.id}`,
+    date: item.createdAt,
+    category: "Asset",
+    title: item.type || "Asset update",
+    description: formatLifecycleDescription(item)
+  }));
+
+  appeals.forEach((appeal) => {
+    events.push({
+      id: `appeal-raised-${appeal.id}`,
+      date: appeal.createdAt,
+      category: "Issue",
+      title: `Issue raised: ${appeal.title}`,
+      description: `${appeal.description || "No description"} Priority: ${formatStatusLabel(appeal.priority)}.`
+    });
+    if (appeal.assignedEngineerId || appeal.assignedAt) {
+      events.push({
+        id: `appeal-assigned-${appeal.id}`,
+        date: appeal.assignedAt || appeal.updatedAt,
+        category: "Engineer",
+        title: "Engineer assigned",
+        description: `${engineerById.get(appeal.assignedEngineerId)?.name || "Assigned engineer"} was assigned to ${appeal.title}.`
+      });
+    }
+    events.push({
+      id: `appeal-current-${appeal.id}`,
+      date: appeal.updatedAt || appeal.createdAt,
+      category: "Issue status",
+      title: `Issue ${formatStatusLabel(appeal.status)}`,
+      description: `${appeal.title} is currently ${formatStatusLabel(appeal.status).toLowerCase()}.`
+    });
+  });
+
+  serviceRecords.forEach((record) => events.push({
+    id: `service-${record.id}`,
+    date: record.updatedAt || record.serviceDate,
+    category: "Service",
+    title: `${record.serviceType || "Service"} — ${formatStatusLabel(record.status)}`,
+    description: `${record.description || "No service description"} Engineer: ${record.technicianName || "Not assigned"}. Next due: ${record.nextServiceDue || "Not scheduled"}.`
+  }));
+
+  (data.notifications || [])
+    .filter((notification) =>
+      (notification.entityType === "asset" && notification.entityId === asset.id) ||
+      (notification.entityType === "appeal" && appealIds.has(notification.entityId)) ||
+      (notification.entityType === "service" && serviceIds.has(notification.entityId))
+    )
+    .forEach((notification) => events.push({
+      id: `notification-${notification.id}`,
+      date: notification.createdAt,
+      category: notification.entityType === "appeal" ? "Issue update" : notification.entityType === "service" ? "Service update" : "Asset update",
+      title: notification.title || "Activity recorded",
+      description: notification.message || "Activity recorded in the asset system."
+    }));
+
+  return events
+    .filter((event) => event.date)
+    .sort((first, second) => new Date(first.date).getTime() - new Date(second.date).getTime());
+}
+
+function reportDate(value) {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: String(value).includes("T") ? "short" : undefined });
+}
+
+async function imageAsDataUrl(url) {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function downloadAssetReportPdf(asset, data) {
+  const client = (data.clients || []).find((item) => item.id === asset.clientId);
+  const appeals = (data.appeals || []).filter((appeal) => appeal.assetId === asset.id);
+  const services = (data.serviceRecords || []).filter((record) => record.assetId === asset.id);
+  const events = assetReportEvents(asset, data);
+  const document = new jsPDF({ unit: "mm", format: "a4" });
+  const pageWidth = document.internal.pageSize.getWidth();
+  const addHeader = () => {
+    document.setFillColor(9, 20, 36);
+    document.rect(0, 0, pageWidth, 31, "F");
+    document.setFillColor(239, 31, 36);
+    document.rect(0, 31, pageWidth, 2, "F");
+    document.setTextColor(255, 255, 255);
+    document.setFont("helvetica", "bold");
+    document.setFontSize(18);
+    document.text("HAAK INFOTECH", 16, 14);
+    document.setFontSize(9);
+    document.setFont("helvetica", "normal");
+    document.text("ASSET MANAGEMENT & SERVICE REPORT", 16, 22);
+    document.text(`Generated ${reportDate(new Date().toISOString())}`, pageWidth - 16, 22, { align: "right" });
+  };
+  addHeader();
+  try {
+    const logo = await imageAsDataUrl("/haak-logo-transparent.png");
+    document.addImage(logo, "PNG", pageWidth - 48, 4, 32, 13);
+  } catch {
+    // The text header remains complete when an image cannot be loaded offline.
+  }
+
+  document.setTextColor(15, 23, 42);
+  document.setFont("helvetica", "bold");
+  document.setFontSize(16);
+  document.text(asset.name || "Asset report", 16, 45);
+  document.setFontSize(9);
+  document.setFont("helvetica", "normal");
+  document.setTextColor(71, 85, 105);
+  document.text(`${asset.assetCode || "No asset code"} | ${client?.companyName || "Unassigned company"}`, 16, 51);
+
+  autoTable(document, {
+    startY: 58,
+    theme: "grid",
+    head: [["Asset information", "Value", "Asset information", "Value"]],
+    body: [
+      ["Status", formatStatusLabel(asset.status), "Category", asset.category || "Not recorded"],
+      ["Brand / model", `${asset.brand || "Not recorded"} / ${asset.model || "Not recorded"}`, "Serial number", asset.serialNumber || "Not recorded"],
+      ["Branch", branchName(client, asset.branchId), "Location", asset.location || "Not recorded"],
+      ["Purchase date", asset.purchaseDate || "Not recorded", "Warranty ends", asset.warrantyEndDate || "Not recorded"],
+      ["Total issues", String(appeals.length), "Service records", String(services.length)]
+    ],
+    headStyles: { fillColor: [239, 31, 36], textColor: 255 },
+    styles: { fontSize: 8, cellPadding: 2.5 }
+  });
+
+  autoTable(document, {
+    startY: document.lastAutoTable.finalY + 8,
+    theme: "striped",
+    head: [["Date & time", "Type", "Event", "Details"]],
+    body: events.length
+      ? events.map((event) => [reportDate(event.date), event.category, event.title, event.description])
+      : [["—", "—", "No history recorded", "No lifecycle, issue, or service activity is available for this asset."]],
+    headStyles: { fillColor: [9, 20, 36], textColor: 255 },
+    alternateRowStyles: { fillColor: [247, 249, 252] },
+    styles: { fontSize: 7.5, cellPadding: 2.4, overflow: "linebreak" },
+    columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 24 }, 2: { cellWidth: 42 } },
+    margin: { top: 38, bottom: 16 },
+    didDrawPage: (hook) => {
+      if (hook.pageNumber > 1) addHeader();
+      document.setFontSize(8);
+      document.setTextColor(100);
+      document.text(`HAAK INFOTECH • ${asset.assetCode || asset.name}`, 16, 291);
+      document.text(`Page ${hook.pageNumber}`, pageWidth - 16, 291, { align: "right" });
+    }
+  });
+  document.save(`HAAK_${String(asset.assetCode || asset.name || "asset").replace(/[^a-z0-9_-]+/gi, "_")}_report.pdf`);
+}
+
+function AssetReport({ asset, data, notify }) {
+  const client = data.clients.find((item) => item.id === asset.clientId);
+  const events = assetReportEvents(asset, data);
+  const issues = data.appeals.filter((appeal) => appeal.assetId === asset.id);
+  const services = data.serviceRecords.filter((record) => record.assetId === asset.id);
+  const [downloading, setDownloading] = useState(false);
+
+  async function download() {
+    setDownloading(true);
+    try {
+      await downloadAssetReportPdf(asset, data);
+      notify("Asset report downloaded.");
+    } catch {
+      notify("The PDF report could not be generated. Please try again.", "error");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  return (
+    <div className="asset-report">
+      <div className="panel report-cover">
+        <div className="report-brand"><img src="/haak-logo-transparent.png" alt="HAAK INFOTECH" /><div><span>HAAK INFOTECH</span><strong>Asset management &amp; service report</strong></div></div>
+        <button className="primary" type="button" onClick={download} disabled={downloading}><Download size={16} /> {downloading ? "Preparing PDF..." : "Download PDF"}</button>
+        <div className="report-title"><span className={statusClass(asset.status)}>{formatStatusLabel(asset.status)}</span><h2>{asset.name}</h2><p>{asset.assetCode} · {client?.companyName || "Unassigned company"}</p></div>
+        <div className="report-summary">
+          <span><small>Issues</small><strong>{issues.length}</strong></span>
+          <span><small>Service records</small><strong>{services.length}</strong></span>
+          <span><small>History events</small><strong>{events.length}</strong></span>
+          <span><small>Current status</small><strong>{formatStatusLabel(asset.status)}</strong></span>
+        </div>
+      </div>
+      <div className="panel report-timeline-panel">
+        <div className="panel-head"><div><span className="eyebrow">Complete record</span><h2>Asset activity timeline</h2><p>Includes earlier saved lifecycle, issue, assignment, status, and repair records.</p></div></div>
+        <div className="report-timeline">
+          {events.length ? [...events].reverse().map((event) => (
+            <article key={event.id} className="report-event">
+              <div className="report-event-date"><strong>{reportDate(event.date)}</strong><span>{event.category}</span></div>
+              <div><h3>{event.title}</h3><p>{event.description}</p></div>
+            </article>
+          )) : <div className="empty-inline">No history has been recorded for this asset yet.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function companyReportData(client, data) {
+  const assets = (data.assets || []).filter((asset) => asset.clientId === client.id);
+  const assetIds = new Set(assets.map((asset) => asset.id));
+  const appeals = (data.appeals || []).filter((appeal) => assetIds.has(appeal.assetId));
+  const services = (data.serviceRecords || []).filter((record) => assetIds.has(record.assetId));
+  const events = assets.flatMap((asset) =>
+    assetReportEvents(asset, data).map((event) => ({
+      ...event,
+      id: `${asset.id}-${event.id}`,
+      assetName: asset.name,
+      assetCode: asset.assetCode
+    }))
+  );
+  (data.notifications || [])
+    .filter((notification) => notification.entityType === "company" && notification.entityId === client.id)
+    .forEach((notification) => events.push({
+      id: `company-${notification.id}`,
+      date: notification.createdAt,
+      category: "Company",
+      title: notification.title || "Company updated",
+      description: notification.message || "Company details were updated.",
+      assetName: "Company account",
+      assetCode: ""
+    }));
+  events.sort((first, second) => new Date(first.date).getTime() - new Date(second.date).getTime());
+  return { assets, appeals, services, events };
+}
+
+async function downloadCompanyReportPdf(client, data) {
+  const { assets, appeals, services } = companyReportData(client, data);
+  const document = new jsPDF({ unit: "mm", format: "a4" });
+  const pageWidth = document.internal.pageSize.getWidth();
+  const addHeader = () => {
+    document.setFillColor(9, 20, 36);
+    document.rect(0, 0, pageWidth, 31, "F");
+    document.setFillColor(239, 31, 36);
+    document.rect(0, 31, pageWidth, 2, "F");
+    document.setTextColor(255, 255, 255);
+    document.setFont("helvetica", "bold");
+    document.setFontSize(18);
+    document.text("HAAK INFOTECH", 16, 14);
+    document.setFontSize(9);
+    document.setFont("helvetica", "normal");
+    document.text("COMPANY ASSET & SERVICE REPORT", 16, 22);
+    document.text(`Generated ${reportDate(new Date().toISOString())}`, pageWidth - 16, 22, { align: "right" });
+  };
+  addHeader();
+  try {
+    const logo = await imageAsDataUrl("/haak-logo-transparent.png");
+    document.addImage(logo, "PNG", pageWidth - 48, 4, 32, 13);
+  } catch {
+    // The text header remains complete when the logo cannot be loaded offline.
+  }
+  document.setTextColor(15, 23, 42);
+  document.setFont("helvetica", "bold");
+  document.setFontSize(16);
+  document.text(client.companyName || "Company report", 16, 45);
+  document.setFont("helvetica", "normal");
+  document.setFontSize(9);
+  document.setTextColor(71, 85, 105);
+  document.text(`${client.contactPerson || "Contact not recorded"} | ${client.email || "Email not recorded"}`, 16, 51);
+
+  autoTable(document, {
+    startY: 58,
+    theme: "grid",
+    head: [["Company information", "Value", "Company information", "Value"]],
+    body: [
+      ["Status", formatStatusLabel(client.status), "Phone", client.phone || "Not recorded"],
+      ["Address", client.address || "Not recorded", "Branches", String((client.branches || []).length || 1)],
+      ["AMC start", client.amcStartDate || "Not recorded", "AMC end", client.amcEndDate || "Not recorded"],
+      ["Managed assets", String(assets.length), "Issues", String(appeals.length)],
+      ["Active assets", String(assets.filter((asset) => asset.status === "active").length), "Service records", String(services.length)]
+    ],
+    headStyles: { fillColor: [239, 31, 36], textColor: 255 },
+    styles: { fontSize: 8, cellPadding: 2.5 }
+  });
+
+  autoTable(document, {
+    startY: document.lastAutoTable.finalY + 8,
+    theme: "striped",
+    head: [["Asset code", "Asset", "Category", "Status", "Issues", "Service records"]],
+    body: assets.length ? assets.map((asset) => [
+      asset.assetCode || "—",
+      asset.name || "Unnamed asset",
+      asset.category || "—",
+      formatStatusLabel(asset.status),
+      String(appeals.filter((appeal) => appeal.assetId === asset.id).length),
+      String(services.filter((record) => record.assetId === asset.id).length)
+    ]) : [["—", "No assets assigned", "—", "—", "0", "0"]],
+    headStyles: { fillColor: [9, 20, 36], textColor: 255 },
+    styles: { fontSize: 7.5, cellPadding: 2.3 },
+    margin: { top: 38, bottom: 16 },
+    didDrawPage: (hook) => {
+      if (hook.pageNumber > 1) addHeader();
+      document.setFontSize(8);
+      document.setTextColor(100);
+      document.text(`HAAK INFOTECH • ${client.companyName}`, 16, 291);
+      document.text(`Page ${hook.pageNumber}`, pageWidth - 16, 291, { align: "right" });
+    }
+  });
+
+  document.save(`HAAK_${String(client.companyName || "company").replace(/[^a-z0-9_-]+/gi, "_")}_company_report.pdf`);
+}
+
+function CompanyReport({ client, data, notify }) {
+  const { assets, appeals, services } = companyReportData(client, data);
+  const [downloading, setDownloading] = useState(false);
+  async function download() {
+    setDownloading(true);
+    try {
+      await downloadCompanyReportPdf(client, data);
+      notify("Company report downloaded.");
+    } catch {
+      notify("The company PDF report could not be generated. Please try again.", "error");
+    } finally {
+      setDownloading(false);
+    }
+  }
+  return (
+    <div className="asset-report company-report">
+      <div className="panel report-cover">
+        <div className="report-brand"><img src="/haak-logo-transparent.png" alt="HAAK INFOTECH" /><div><span>HAAK INFOTECH</span><strong>Company asset &amp; service report</strong></div></div>
+        <button className="primary" type="button" onClick={download} disabled={downloading}><Download size={16} /> {downloading ? "Preparing PDF..." : "Download PDF"}</button>
+        <div className="report-title"><span className={statusClass(client.status)}>{formatStatusLabel(client.status)}</span><h2>{client.companyName}</h2><p>{client.contactPerson || "Contact not recorded"} · {client.email || "Email not recorded"}</p></div>
+        <div className="report-summary">
+          <span><small>Managed assets</small><strong>{assets.length}</strong></span>
+          <span><small>Active assets</small><strong>{assets.filter((asset) => asset.status === "active").length}</strong></span>
+          <span><small>Issues</small><strong>{appeals.length}</strong></span>
+          <span><small>Service records</small><strong>{services.length}</strong></span>
+        </div>
+      </div>
+      <div className="panel company-report-assets">
+        <div className="panel-head"><div><span className="eyebrow">Asset register</span><h2>All company assets</h2></div><span className="badge active">{assets.length}</span></div>
+        <div className="company-report-table">
+          <div className="company-report-row company-report-head"><span>Asset</span><span>Category</span><span>Status</span><span>Issues</span><span>Services</span></div>
+          {assets.length ? assets.map((asset) => <div className="company-report-row" key={asset.id}><span><strong>{asset.name}</strong><small>{asset.assetCode}</small></span><span>{asset.category || "Not recorded"}</span><span className={statusClass(asset.status)}>{formatStatusLabel(asset.status)}</span><span>{appeals.filter((appeal) => appeal.assetId === asset.id).length}</span><span>{services.filter((record) => record.assetId === asset.id).length}</span></div>) : <div className="empty-inline">No assets are assigned to this company.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EngineerModal({ isOpen, onClose, onSave, engineer }) {
   const [form, setForm] = useState({
     name: "",
@@ -1991,6 +2346,7 @@ function CompanyEditor({ client, assets, onUpdate, onDelete }) {
 
 function CompaniesPage({ user, data, setData, setDataState, notify }) {
   const [selectedId, setSelectedId] = useState("");
+  const [companyView, setCompanyView] = useState("details");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showCompanyModal, setShowCompanyModal] = useState(false);
@@ -2203,7 +2559,7 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
               <button
                 className={selected?.id === client.id ? "company-row company-directory-row selectable active" : "company-row company-directory-row selectable"}
                 key={client.id}
-                onClick={() => setSelectedId(client.id)}
+                onClick={() => { setSelectedId(client.id); setCompanyView("details"); }}
               >
                 <CompanyLogo client={client} />
                 <span className="company-directory-copy">
@@ -2238,10 +2594,15 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
                   </div>
                   <div className="workspace-panel-actions">
                     <span className={statusClass(selected.status)}>{selected.status}</span>
-                    <button className="secondary workspace-close-button" type="button" onClick={() => setSelectedId("")}><X size={16} /> Close</button>
+                    <div className="segmented-control">
+                      <button className={companyView === "details" ? "active" : ""} type="button" onClick={() => setCompanyView("details")}>Details</button>
+                      <button className={companyView === "edit" ? "active" : ""} type="button" onClick={() => setCompanyView("edit")}>Edit</button>
+                      <button className={companyView === "report" ? "active" : ""} type="button" onClick={() => setCompanyView("report")}><FileText size={15} /> Report</button>
+                    </div>
+                    <button className="secondary workspace-close-button" type="button" onClick={() => { setSelectedId(""); setCompanyView("details"); }}><X size={16} /> Close</button>
                   </div>
                 </div>
-                <div className="company-overview-grid">
+                {companyView === "details" && <><div className="company-overview-grid">
                   <div className="company-overview-card">
                     <small>Primary email</small>
                     <strong>{selected.email}</strong>
@@ -2261,9 +2622,10 @@ function CompaniesPage({ user, data, setData, setDataState, notify }) {
                 <div className="company-overview-notes">
                   <strong>Address</strong>
                   <p>{selected.address || "Address not added yet."}</p>
-                </div>
+                </div></>}
               </div>
-              <CompanyEditor key={selected.id} client={selected} assets={data.assets} onUpdate={updateCompany} onDelete={deleteCompany} />
+              {companyView === "edit" && <CompanyEditor key={selected.id} client={selected} assets={data.assets} onUpdate={updateCompany} onDelete={deleteCompany} />}
+              {companyView === "report" && <CompanyReport client={selected} data={data} notify={notify} />}
             </>
           ) : (
             <div className="panel empty-state">
@@ -4135,13 +4497,14 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
         <div className="panel asset-subnav">
           <div>
             <span className="eyebrow">Asset workspace</span>
-            <h2>{!selected ? "Select an asset" : assetView === "edit" ? "Edit asset" : "Asset details"}</h2>
+            <h2>{!selected ? "Select an asset" : assetView === "edit" ? "Edit asset" : assetView === "report" ? "Asset report" : "Asset details"}</h2>
           </div>
           <div className="workspace-panel-actions">
             {selected && (
               <div className="segmented-control">
                 <button className={assetView === "details" ? "active" : ""} type="button" onClick={() => setAssetView("details")}>Details</button>
                 <button className={assetView === "edit" ? "active" : ""} type="button" onClick={() => setAssetView("edit")}>Edit asset</button>
+                <button className={assetView === "report" ? "active" : ""} type="button" onClick={() => setAssetView("report")}><FileText size={15} /> Report</button>
               </div>
             )}
             {selected && <button className="secondary workspace-close-button" type="button" onClick={() => { setSelectedId(""); setAssetView("details"); }}><X size={16} /> Close</button>}
@@ -4229,6 +4592,7 @@ function AssetsPage({ user, data, scopedAssets, setData, notify, onAddEngineer, 
                 </div>
               )
             )}
+            {assetView === "report" && selected && <AssetReport asset={selected} data={data} notify={notify} />}
           </>
         ) : (
           <div className="panel empty-state asset-empty-state">
